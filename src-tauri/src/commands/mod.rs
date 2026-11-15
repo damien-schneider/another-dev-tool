@@ -1,0 +1,10 @@
+pub mod agent;
+pub mod destinations;
+pub mod favorite_projects;
+pub mod files;
+pub mod install;
+pub mod prompts;
+pub mod roots;
+pub mod scan;
+pub mod sync;
+pub mod watcher;
