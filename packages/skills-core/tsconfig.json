@@ -1,9 +1,0 @@
-{
-  "extends": "@skills-agent-library/config/tsconfig.base.json",
-  "compilerOptions": {
-    "lib": ["ESNext", "DOM"],
-    "strictNullChecks": true,
-    "noEmit": true
-  },
-  "include": ["src/**/*.ts"]
-}

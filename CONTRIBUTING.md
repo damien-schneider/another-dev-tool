@@ -1,6 +1,6 @@
-# Contributing to Skills Agent Library
+# Contributing to Another Dev Tool
 
-Thank you for your interest in contributing to the Skills Agent Library! This project is dedicated to building a high-quality repository of skills for AI agents.
+Thank you for your interest in contributing to Another Dev Tool, a macOS app for managing the skills and agent rules on your machine.
 
 ## Code Standards
 
@@ -27,24 +27,20 @@ This project uses **Ultracite** to enforce strict code quality standards through
     ```bash
     bun install
     ```
-3.  **Setup Convex**:
-    ```bash
-    bun run dev:setup
-    ```
-4.  **Create a branch**:
+3.  **Create a branch**:
     ```bash
     git checkout -b feature/your-feature-name
     ```
-5.  **Develop**: Run the development server:
+4.  **Develop**: Run the app:
     ```bash
     bun run dev
     ```
-6.  **Verify**: Ensure your code passes the quality checks:
+5.  **Verify**: Ensure your code passes the quality checks:
     ```bash
-    bun x ultracite check
+    bun x ultracite check && bun run check-types && bun run test && bun run test:rust
     ```
-7.  **Commit**: Use descriptive commit messages. Husky will run pre-commit hooks to ensure code quality.
-8.  **Submit a Pull Request**: Provide a clear description of your changes and why they are needed.
+6.  **Commit**: Use descriptive commit messages. Husky will run pre-commit hooks to ensure code quality.
+7.  **Submit a Pull Request**: Provide a clear description of your changes and why they are needed.
 
 ## Style Guide
 
@@ -59,4 +55,4 @@ This project uses **Ultracite** to enforce strict code quality standards through
 - Avoid done callbacks in async tests; use async/await instead.
 - Do not include `.only` or `.skip` in committed code.
 
-Thank you for helping us build a better library for AI agents!
+Thank you for helping make Another Dev Tool better!

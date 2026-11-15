@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Create a report to help us improve the library
+about: Create a report to help us improve Another Dev Tool
 title: "[BUG] "
 labels: bug
 assignees: ''
@@ -24,9 +24,8 @@ A clear and concise description of what you expected to happen.
 If applicable, add screenshots to help explain your problem.
 
 **Environment (please complete the following information):**
-- OS: [e.g. macOS, Windows]
-- Browser [e.g. chrome, safari]
-- Bun Version [e.g. 1.1.0]
+- macOS version [e.g. 15.2]
+- App version [e.g. 0.0.19]
 
 **Additional context**
-Add any other context about the problem here (e.g. Convex logs or terminal output).
+Add any other context about the problem here (e.g. app logs or terminal output).
