@@ -53,6 +53,6 @@ export function slugifySkillName(name: string): string {
     .replace(SPACES_PATTERN, "-")
     .replace(INVALID_CHARS_PATTERN, "")
     .replace(MULTIPLE_HYPHENS_PATTERN, "-")
-    .replace(LEADING_TRAILING_HYPHENS_PATTERN, "")
-    .slice(0, 64);
+    .slice(0, 64)
+    .replace(LEADING_TRAILING_HYPHENS_PATTERN, "");
 }
