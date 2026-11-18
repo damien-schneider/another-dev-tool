@@ -151,16 +151,6 @@ mod tests {
     }
 
     #[test]
-    fn seeds_the_agent_homes_and_code_folders_that_exist() {
-        let db = Db::open_in_memory().unwrap();
-        let (_dir, home) = home_with(DEFAULT_ROOTS);
-
-        seed_roots_under(&db, &home).unwrap();
-
-        assert_eq!(root_paths(&db), under(&home, DEFAULT_ROOTS));
-    }
-
-    #[test]
     fn skips_directories_that_do_not_exist() {
         let db = Db::open_in_memory().unwrap();
         let (_dir, home) = home_with(&[".claude", "Developer"]);

@@ -142,7 +142,11 @@ mod tests {
 
         assert_eq!(stat.size, 5);
         assert!(stat.mtime_ns > 0);
-        assert_eq!(stat.mtime_ms(), stat.mtime_ns / 1_000_000);
+        let stamped = FileStat {
+            size: 5,
+            mtime_ns: 1_700_000_000_123_456_789,
+        };
+        assert_eq!(stamped.mtime_ms(), 1_700_000_000_123);
     }
 
     #[test]

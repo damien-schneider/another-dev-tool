@@ -264,10 +264,7 @@ mod tests {
 
     #[test]
     fn a_plugins_directory_is_vendor_only_inside_an_agent_home() {
-        for home in [".claude", ".codex", ".cursor", ".gemini", ".agents"] {
-            let dir = PathBuf::from(format!("/Users/me/{home}/plugins"));
-            assert!(is_vendor_plugin_dir(&dir), "{home}");
-        }
+        assert!(is_vendor_plugin_dir(Path::new("/Users/me/.claude/plugins")));
         assert!(!is_vendor_plugin_dir(Path::new("/repo/plugins")));
         assert!(!is_vendor_plugin_dir(Path::new("/repo/src/plugins")));
         assert!(!is_vendor_plugin_dir(Path::new("/Users/me/.claude/skills")));

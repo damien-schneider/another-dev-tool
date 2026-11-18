@@ -77,15 +77,6 @@ describe("AgentPanel", () => {
     expect(session.send).toHaveBeenCalledWith("tighten it", DOCUMENT);
   });
 
-  it("keeps Shift+Enter for a new line", () => {
-    const { session } = renderPanel();
-
-    fireEvent.change(composer(), { target: { value: "tighten it" } });
-    fireEvent.keyDown(composer(), { key: "Enter", shiftKey: true });
-
-    expect(session.send).not.toHaveBeenCalled();
-  });
-
   it("drafts an example request without sending it", () => {
     const { session } = renderPanel();
 

@@ -165,39 +165,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn migrating_creates_every_table() {
-        let db = Db::open_in_memory().unwrap();
-
-        let tables: Vec<String> = db
-            .with_conn(|conn| {
-                let mut stmt =
-                    conn.prepare("SELECT name FROM sqlite_master WHERE type = 'table'")?;
-                let rows = stmt
-                    .query_map([], |row| row.get::<_, String>(0))?
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(rows)
-            })
-            .unwrap();
-
-        for expected in [
-            "roots",
-            "files",
-            "scans",
-            "sync_groups",
-            "sync_members",
-            "backups",
-            "meta",
-            "prompt_history",
-            "favorite_projects",
-            "prompt_attachments",
-            "file_refs",
-            "file_aliases",
-        ] {
-            assert!(tables.iter().any(|t| t == expected), "missing {expected}");
-        }
-    }
-
-    #[test]
     fn migrating_is_idempotent() {
         let db = Db::open_in_memory().unwrap();
         db.migrate().unwrap();

@@ -143,8 +143,11 @@ mod tests {
     fn copy_warnings_only_flag_symlinks() {
         let dir = tempdir().unwrap();
         let plain = dir.path().join("CLAUDE.md");
+        let link = dir.path().join("AGENTS.md");
         fs::write(&plain, "x").unwrap();
+        std::os::unix::fs::symlink(&plain, &link).unwrap();
 
+        assert_eq!(copy_warnings(&link), [SyncWarning::ExistingSymlink]);
         assert!(copy_warnings(&plain).is_empty());
     }
 
