@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  hasFrontmatter,
-  joinFrontmatter,
-  splitFrontmatter,
-} from "../frontmatter";
+import { joinFrontmatter, splitFrontmatter } from "../frontmatter";
 
 function roundTrip(content: string): string {
   return joinFrontmatter(splitFrontmatter(content));
@@ -90,12 +86,5 @@ describe("joinFrontmatter", () => {
     const rebuilt = joinFrontmatter({ ...split, frontmatter: "name: other" });
 
     expect(rebuilt).toBe("---\nname: other\n---\nbody\n");
-  });
-});
-
-describe("hasFrontmatter", () => {
-  it("reports presence", () => {
-    expect(hasFrontmatter("---\nname: demo\n---\n")).toBe(true);
-    expect(hasFrontmatter("# Title\n")).toBe(false);
   });
 });

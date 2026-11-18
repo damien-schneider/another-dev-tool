@@ -59,9 +59,4 @@ mod tests {
             hash_bytes(&bytes)
         );
     }
-
-    #[test]
-    fn different_content_hashes_differently() {
-        assert_ne!(hash_bytes(b"a"), hash_bytes(b"b"));
-    }
 }

@@ -83,7 +83,3 @@ export function joinFrontmatter(split: FrontmatterSplit): string {
   const inner = frontmatter === "" ? "" : `${frontmatter}${lineEnding}`;
   return `${prefix}${inner}${suffix}${body}`;
 }
-
-export function hasFrontmatter(content: string): boolean {
-  return splitFrontmatter(content).frontmatter !== null;
-}

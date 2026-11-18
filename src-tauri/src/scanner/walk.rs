@@ -376,22 +376,4 @@ mod tests {
 
         assert!(found.into_inner().unwrap().is_empty());
     }
-
-    #[test]
-    fn project_dir_is_the_nearest_git_ancestor() {
-        let dir = tempdir().unwrap();
-        let root = dir.path();
-        fs::create_dir_all(root.join("repo/.git")).unwrap();
-        write(&root.join("repo/packages/api/AGENTS.md"), "a");
-        write(&root.join("loose/AGENTS.md"), "b");
-
-        let inside = project_dir_of(&root.join("repo/packages/api/AGENTS.md"), root);
-        let outside = project_dir_of(&root.join("loose/AGENTS.md"), root);
-
-        assert_eq!(
-            inside,
-            Some(root.join("repo").to_string_lossy().into_owned())
-        );
-        assert_eq!(outside, None);
-    }
 }

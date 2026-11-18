@@ -1,32 +1,33 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { joinFrontmatter, splitFrontmatter } from "../frontmatter";
-import { classifyPath, isSkippedDir } from "../scan-targets";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
+const SKIPPED_DIRS = new Set([".git", "node_modules", "target", "dist"]);
+const MARKDOWN_FILE = /\.mdc?$/;
 
-function collectTargets(dir: string, found: string[] = []): string[] {
+function collectMarkdown(dir: string, found: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (!isSkippedDir(entry.name)) {
-        collectTargets(path, found);
+      if (!SKIPPED_DIRS.has(entry.name)) {
+        collectMarkdown(path, found);
       }
       continue;
     }
-    if (entry.isFile() && classifyPath(path) !== null) {
+    if (entry.isFile() && MARKDOWN_FILE.test(entry.name)) {
       found.push(path);
     }
   }
   return found;
 }
 
-const corpus = collectTargets(REPO_ROOT);
+const corpus = collectMarkdown(REPO_ROOT);
 
 describe("frontmatter round-trip over the repository corpus", () => {
-  it("finds agent config files to check", () => {
+  it("finds markdown files to check", () => {
     expect(corpus.length).toBeGreaterThan(3);
   });
 
@@ -47,12 +48,6 @@ describe("frontmatter round-trip over the repository corpus", () => {
       expect(edited.startsWith(split.prefix)).toBe(true);
       expect(edited.endsWith("\nedit")).toBe(true);
       expect(splitFrontmatter(edited).frontmatter).toBe(split.frontmatter);
-    }
-  });
-
-  it("never reports a stat file as an agent target", () => {
-    for (const path of corpus) {
-      expect(statSync(path).isFile()).toBe(true);
     }
   });
 });

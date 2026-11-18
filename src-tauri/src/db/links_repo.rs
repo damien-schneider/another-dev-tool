@@ -236,7 +236,10 @@ mod tests {
         );
         refs(&db, skill, &["upgrade"]);
 
-        assert!(db.with_conn(graph).unwrap().edges.is_empty());
+        let links = db.with_conn(|conn| links_of(conn, skill)).unwrap();
+
+        assert!(links.outgoing.is_empty());
+        assert!(links.incoming.is_empty());
     }
 
     #[test]
