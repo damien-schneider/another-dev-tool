@@ -356,10 +356,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path();
         fs::create_dir_all(root.join("consumer")).unwrap();
-        std::os::unix::fs::symlink(root.join("missing.md"), root.join("consumer/AGENTS.md"))
-            .unwrap();
+        let link = root.join("consumer/AGENTS.md");
+        std::os::unix::fs::symlink(root.join("missing.md"), &link).unwrap();
 
         assert!(collect(root).is_empty());
+        // the watcher and the scanner hand paths straight to `describe`, bypassing the walker
+        assert!(describe(&link, FileKind::AgentsMd).is_none());
     }
 
     #[test]
