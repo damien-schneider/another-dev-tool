@@ -160,7 +160,7 @@ export function CaptureOverlay() {
       {/* Opaque on purpose: this window is transparent, so a translucent
           surface would let the app behind it show through the text. */}
       <span
-        className="capture-island flex h-15 w-full items-center gap-3 rounded-full border border-border bg-card px-3 text-card-foreground shadow-md"
+        className="capture-island border-border bg-card text-card-foreground flex h-15 w-full items-center gap-3 rounded-full border px-3 shadow-md"
         data-exiting={exiting}
         key={notice.id}
       >

@@ -83,14 +83,14 @@ export function DeletePromptDialog({
           <div className="border-border border-s-2 ps-3">
             <Text
               as="blockquote"
-              className="line-clamp-4 whitespace-pre-wrap break-words"
+              className="line-clamp-4 break-words whitespace-pre-wrap"
               tone="muted"
             >
               {shown?.content}
             </Text>
           </div>
           {error ? (
-            <Text role="alert" size="label" tone="destructive">
+            <Text role="alert" size="label" tone="danger">
               {error}
             </Text>
           ) : null}

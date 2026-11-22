@@ -156,7 +156,7 @@ export function AboutSection({ update }: { update: UseAppUpdate }) {
               as="p"
               numeric
               role={status.failed ? "alert" : "status"}
-              tone={status.failed ? "destructive" : "muted"}
+              tone={status.failed ? "danger" : "muted"}
             >
               {status.text}
             </Text>

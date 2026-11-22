@@ -79,7 +79,7 @@ export function RemoveGroupDialog({
         </AlertDialogHeader>
         {error ? (
           <AlertDialogBody>
-            <Text as="p" role="alert" tone="destructive">
+            <Text as="p" role="alert" tone="danger">
               {error}
             </Text>
           </AlertDialogBody>

@@ -115,11 +115,12 @@ describe("isVendorPluginDir", () => {
     ]);
   });
 
-  it.each(
-    VENDOR_PLUGIN_PARENTS
-  )("skips the plugins directory of %s", (home) => {
-    expect(isVendorPluginDir(`/Users/me/${home}/plugins`)).toBe(true);
-  });
+  it.each(VENDOR_PLUGIN_PARENTS)(
+    "skips the plugins directory of %s",
+    (home) => {
+      expect(isVendorPluginDir(`/Users/me/${home}/plugins`)).toBe(true);
+    }
+  );
 
   it.each([
     "/repo/plugins",

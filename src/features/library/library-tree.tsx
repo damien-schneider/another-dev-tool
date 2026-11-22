@@ -3,304 +3,191 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
 } from "@ctrl-ui/react/ui/sidebar";
-import {
-  Tree,
-  TreeItem,
-  TreeItemContent,
-  TreeItemIndicator,
-  TreeItemLabel,
-  TreeItemTrigger,
-} from "@ctrl-ui/react/ui/tree";
+import { Tree } from "@ctrl-ui/react/ui/tree";
 import { Text } from "@ctrl-ui/react/ui/typography";
-import { FolderGit2, GitBranch, Link2, Star, UserRound } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { targetLabel } from "@/lib/agent-files/scan-targets";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
+import type { AgentReference } from "@/features/agent/agent-references";
 import { useHomeDirectory } from "@/lib/home-dir";
 import type { FileRow, Root } from "@/lib/ipc-types";
 import {
   buildTree,
   fileIdOf,
   fileNodeId,
+  folderIds,
+  folderIdsOf,
   TREE_ROOT_ID,
-  type TreeIndex,
 } from "@/lib/tree";
-
-import { FileKindIcon } from "./file-kind";
 import {
+  aliasEntryId,
+  aliasOfEntryId,
   buildLibraryModel,
-  entryTitle,
-  type LibraryCollection,
-  type LibraryEntry,
-  type LibraryScope,
-  pathName,
 } from "./library-model";
+import { pathName } from "./library-paths";
+import {
+  FavoriteStar,
+  FolderNode,
+  ScopeContents,
+  ScopeItem,
+} from "./library-rows";
+import { ReferenceContext } from "./reference-action";
 
 export type LibraryTreeMode = "grouped" | "folders";
 
 export interface LibraryTreeProps {
   files: FileRow[];
+  /** Every indexed file, `files` being a search's matches among them. */
+  indexedFiles: FileRow[];
   roots: Root[];
   mode: LibraryTreeMode;
   selectedFileId: number | null;
+  selectedAlias: string | null;
   favoritePaths: ReadonlySet<string>;
-  /** Shows every branch open, as while a search narrows the list. */
+  onToggleFavorite: (path: string) => Promise<void>;
+  project: string | null;
   expandAll: boolean;
-  onSelectFile: (file: FileRow) => void;
-}
-
-const ICON_CLASS = "size-3.5 shrink-0 text-muted-foreground";
-
-const SCOPE_ICONS = {
-  personal: UserRound,
-  project: FolderGit2,
-  worktree: GitBranch,
-} as const;
-
-function linkLabel(entry: LibraryEntry): string | null {
-  if (entry.linked) {
-    return `Linked from ${entry.file.path}`;
-  }
-  if (entry.file.isSymlink) {
-    return "Symbolic link";
-  }
-  const count = entry.file.aliases.length;
-  if (count === 0) {
-    return null;
-  }
-  return `Linked from ${count} other ${count === 1 ? "location" : "locations"}`;
-}
-
-function EntryItem({
-  entry,
-  context,
-}: {
-  entry: LibraryEntry;
-  context?: string;
-}) {
-  const { file } = entry;
-  const title = entryTitle(entry);
-  const link = linkLabel(entry);
-  return (
-    <TreeItem label={title} value={entry.id}>
-      <TreeItemTrigger title={entry.path}>
-        <TreeItemIndicator />
-        <FileKindIcon className={ICON_CLASS} kind={file.kind} />
-        <TreeItemLabel className="flex-initial">{title}</TreeItemLabel>
-        <Text
-          as="span"
-          className="min-w-0 flex-1 truncate"
-          size="caption"
-          tone="muted"
-        >
-          {context ?? (file.kind === "skill" ? "" : targetLabel(file.kind))}
-        </Text>
-        {link ? (
-          <Link2 aria-label={link} className={ICON_CLASS} role="img" />
-        ) : null}
-      </TreeItemTrigger>
-    </TreeItem>
-  );
-}
-
-function Count({ value }: { value: number }) {
-  return (
-    <Text as="span" numeric size="caption" tone="muted">
-      {value}
-    </Text>
-  );
-}
-
-function CollectionItems({ collection }: { collection: LibraryCollection }) {
-  const [first] = collection.entries;
-  if (!first) {
-    return null;
-  }
-  if (collection.relativePath === "") {
-    return collection.entries.map((entry) => (
-      <EntryItem entry={entry} key={entry.id} />
-    ));
-  }
-  if (collection.entries.length === 1) {
-    return <EntryItem context={collection.relativePath} entry={first} />;
-  }
-  return (
-    <TreeItem label={collection.relativePath} value={collection.id}>
-      <TreeItemTrigger title={collection.path}>
-        <TreeItemIndicator />
-        <TreeItemLabel>{collection.relativePath}</TreeItemLabel>
-        <Count value={collection.entries.length} />
-      </TreeItemTrigger>
-      <TreeItemContent>
-        {collection.entries.map((entry) => (
-          <EntryItem entry={entry} key={entry.id} />
-        ))}
-      </TreeItemContent>
-    </TreeItem>
-  );
-}
-
-function ScopeItem({
-  scope,
-  favorite,
-}: {
-  scope: LibraryScope;
-  favorite: boolean;
-}) {
-  const Icon = SCOPE_ICONS[scope.kind];
-  return (
-    <TreeItem label={scope.label} value={scope.id}>
-      <TreeItemTrigger title={scope.path}>
-        <TreeItemIndicator />
-        <Icon aria-hidden="true" className={ICON_CLASS} />
-        <TreeItemLabel className="flex-initial">
-          <Text as="span" weight="medium">
-            {scope.label}
-          </Text>
-        </TreeItemLabel>
-        <Text
-          as="span"
-          className="min-w-0 flex-1 truncate"
-          size="caption"
-          tone="muted"
-        >
-          {scope.kind === "personal" ? pathName(scope.path) : ""}
-        </Text>
-        {favorite ? (
-          <Star
-            aria-label="Favorite project"
-            className="size-3 shrink-0 fill-current text-muted-foreground"
-            role="img"
-          />
-        ) : null}
-        <Count value={scope.entryCount} />
-      </TreeItemTrigger>
-      <TreeItemContent>
-        {scope.collections.map((collection) => (
-          <CollectionItems collection={collection} key={collection.id} />
-        ))}
-      </TreeItemContent>
-    </TreeItem>
-  );
-}
-
-function FolderNode({ index, nodeId }: { index: TreeIndex; nodeId: string }) {
-  const node = index[nodeId];
-  if (!node) {
-    return null;
-  }
-  if (node.file) {
-    return (
-      <EntryItem
-        entry={{
-          id: node.id,
-          file: node.file,
-          path: node.file.path,
-          linked: false,
-        }}
-      />
-    );
-  }
-  return (
-    <TreeItem label={node.name} value={node.id}>
-      <TreeItemTrigger>
-        <TreeItemIndicator />
-        <TreeItemLabel>{node.name}</TreeItemLabel>
-      </TreeItemTrigger>
-      <TreeItemContent>
-        {node.childIds.map((childId) => (
-          <FolderNode index={index} key={childId} nodeId={childId} />
-        ))}
-      </TreeItemContent>
-    </TreeItem>
-  );
+  onSelectFile: (file: FileRow, alias: string | null) => void;
+  showAliases: boolean;
+  /** Present while a chat can take a row as a reference. */
+  onReference?: (reference: AgentReference) => void;
 }
 
 /** Long enough for a collapsed branch to finish opening. */
 const REVEAL_DELAY_MS = 250;
 
-export function LibraryTree({
+export function LibraryTree({ onReference, ...props }: LibraryTreeProps) {
+  return (
+    <ReferenceContext value={onReference ?? null}>
+      <LibraryTreeBody {...props} />
+    </ReferenceContext>
+  );
+}
+
+function LibraryTreeBody({
   files,
+  indexedFiles,
   roots,
   mode,
   selectedFileId,
+  selectedAlias,
   favoritePaths,
   expandAll,
   onSelectFile,
-}: LibraryTreeProps) {
+  onToggleFavorite,
+  project,
+  showAliases,
+}: Omit<LibraryTreeProps, "onReference">) {
   const personalHeadingId = useId();
   const projectsHeadingId = useId();
   const home = useHomeDirectory();
   const model = useMemo(
-    () => buildLibraryModel(files, roots, home, favoritePaths),
-    [files, roots, home, favoritePaths]
+    () =>
+      buildLibraryModel(
+        files,
+        roots,
+        home,
+        favoritePaths,
+        indexedFiles,
+        showAliases
+      ),
+    [files, roots, home, favoritePaths, indexedFiles, showAliases]
   );
   const folders = useMemo(
     () => (mode === "folders" ? buildTree(files, roots) : null),
     [files, roots, mode]
   );
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  // A file can show twice (in an agent home and in its repository): the row the
-  // user picked stays the highlighted one.
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  const projectScope =
+    project === null
+      ? undefined
+      : model.projects.find((scope) => scope.path === project);
 
-  const branchIds = useMemo(() => {
-    if (folders) {
-      return Object.values(folders)
-        .filter((node) => node.isFolder && node.id !== TREE_ROOT_ID)
-        .map((node) => node.id);
-    }
-    return [...model.personal, ...model.projects].flatMap((scope) => [
-      scope.id,
-      ...scope.collections.map((collection) => collection.id),
-    ]);
-  }, [folders, model]);
-
-  let selectedId: string | null = null;
-  if (selectedFileId !== null) {
-    selectedId =
-      pickedId !== null && fileIdOf(pickedId) === selectedFileId
-        ? pickedId
-        : fileNodeId(selectedFileId);
-  }
-
-  // Selecting a file (from search, a link, or the command palette) reveals it once;
-  // the user stays free to collapse its project afterwards.
-  const location =
-    selectedId === null ? undefined : model.locationsByEntryId.get(selectedId);
-  const scopeId = location?.scopeId;
-  const collectionId = location?.collectionId;
-  useEffect(() => {
-    if (!(scopeId && collectionId)) {
-      return;
-    }
-    setOverrides((current) =>
-      current[scopeId] && current[collectionId]
-        ? current
-        : { ...current, [scopeId]: true, [collectionId]: true }
-    );
-  }, [scopeId, collectionId]);
-
-  // Folders start open like a file explorer; scopes start closed so a large
-  // library opens as a short list, except a lone scope, which has no siblings.
-  const expanded = useMemo(() => {
-    if (expandAll) {
-      return branchIds;
-    }
-    const scopes = [...model.personal, ...model.projects];
-    const loneScopeId = scopes.length === 1 ? scopes[0]?.id : undefined;
-    return branchIds.filter(
-      (id) => overrides[id] ?? (folders !== null || id === loneScopeId)
-    );
-  }, [branchIds, expandAll, folders, model, overrides]);
+  const branchIds = useMemo(
+    () => (folders ? folderIds(folders) : model.branchIds),
+    [folders, model]
+  );
 
   const filesById = useMemo(
     () => new Map(files.map((file) => [file.id, file])),
     [files]
   );
 
-  // A file opened from elsewhere may sit far down the list: bring its row into
-  // view, once the branches above it have finished opening.
+  let selectedId: string | null = null;
+  if (selectedFileId !== null) {
+    const aliasId =
+      selectedAlias === null
+        ? null
+        : aliasEntryId(selectedFileId, selectedAlias);
+    selectedId =
+      aliasId !== null &&
+      folders === null &&
+      model.locationsByEntryId.has(aliasId)
+        ? aliasId
+        : fileNodeId(selectedFileId);
+  }
+
+  // Reveal a selected file once; the user may collapse its branches afterwards.
+  const location =
+    selectedId === null ? undefined : model.locationsByEntryId.get(selectedId);
+  const selectedFile =
+    selectedFileId === null ? undefined : filesById.get(selectedFileId);
+  const arrangedByFolder = folders !== null;
+  // A string, unlike the array, stays equal when the model rebuilds.
+  const locationKey = location?.branchIds.join("\n");
+  const rootId = selectedFile?.rootId;
+  const relPath = selectedFile?.relPath;
+  const revealIds = useMemo(() => {
+    if (arrangedByFolder) {
+      return rootId === undefined || relPath === undefined
+        ? []
+        : folderIdsOf({ rootId, relPath });
+    }
+    return locationKey ? locationKey.split("\n") : [];
+  }, [arrangedByFolder, rootId, relPath, locationKey]);
+  useEffect(() => {
+    if (revealIds.length === 0) {
+      return;
+    }
+    setOverrides((current) =>
+      revealIds.every((id) => current[id])
+        ? current
+        : {
+            ...current,
+            ...Object.fromEntries(revealIds.map((id) => [id, true])),
+          }
+    );
+  }, [revealIds]);
+
+  // Mounting every row at once freezes the tree: branches start closed, bar a lone top-level one.
+  const expanded = useMemo(() => {
+    if (expandAll) {
+      return branchIds;
+    }
+    let topLevelIds: string[];
+    if (folders) {
+      topLevelIds = folders[TREE_ROOT_ID]?.childIds ?? [];
+    } else if (project === null) {
+      topLevelIds = [...model.personal, ...model.projects].map(
+        (scope) => scope.id
+      );
+    } else {
+      topLevelIds = [
+        ...(projectScope?.collections ?? []),
+        ...model.personal,
+      ].map((item) => item.id);
+    }
+    const loneId = topLevelIds.length === 1 ? topLevelIds[0] : undefined;
+    return branchIds.filter((id) => overrides[id] ?? id === loneId);
+  }, [branchIds, expandAll, folders, model, overrides, project, projectScope]);
+
+  // Scroll only once the branches above the row have finished opening.
   const treeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (selectedId === null) {
@@ -313,6 +200,10 @@ export function LibraryTree({
     }, REVEAL_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [selectedId]);
+
+  useLayoutEffect(() => {
+    treeRef.current?.scrollIntoView({ block: "start" });
+  }, [project]);
 
   const treeProps = {
     expandedValue: expanded,
@@ -328,8 +219,7 @@ export function LibraryTree({
       const fileId = value ? fileIdOf(value) : null;
       const file = fileId === null ? undefined : filesById.get(fileId);
       if (value && file) {
-        setPickedId(value);
-        onSelectFile(file);
+        onSelectFile(file, aliasOfEntryId(value));
       }
     },
     selectionMode: "single",
@@ -348,22 +238,51 @@ export function LibraryTree({
     );
   }
 
-  return (
-    <div ref={treeRef}>
-      {model.personal.length > 0 ? (
+  const personalGroup =
+    model.personal.length > 0 ? (
+      <SidebarGroup>
+        <SidebarGroupLabel id={personalHeadingId}>
+          Personal · every project
+        </SidebarGroupLabel>
+        <SidebarGroupContent>
+          <Tree aria-labelledby={personalHeadingId} {...treeProps}>
+            {model.personal.map((scope) => (
+              <ScopeItem key={scope.id} scope={scope} />
+            ))}
+          </Tree>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    ) : null;
+
+  if (project !== null) {
+    return (
+      <div ref={treeRef}>
         <SidebarGroup>
-          <SidebarGroupLabel id={personalHeadingId}>
-            Personal · every project
-          </SidebarGroupLabel>
           <SidebarGroupContent>
-            <Tree aria-labelledby={personalHeadingId} {...treeProps}>
-              {model.personal.map((scope) => (
-                <ScopeItem favorite={false} key={scope.id} scope={scope} />
-              ))}
-            </Tree>
+            {projectScope ? (
+              <Tree aria-label={projectScope.label} {...treeProps}>
+                <ScopeContents scope={projectScope} />
+              </Tree>
+            ) : null}
+            {projectScope || expandAll ? null : (
+              <Text
+                className="mx-(--cui-sidebar-menu-button-padding-inline) my-1.5"
+                size="caption"
+                tone="muted"
+              >
+                No skills, agents, or rules in {pathName(project)}
+              </Text>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
-      ) : null}
+        {personalGroup}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={treeRef}>
+      {personalGroup}
       {model.projects.length > 0 ? (
         <SidebarGroup>
           <SidebarGroupLabel id={projectsHeadingId}>Projects</SidebarGroupLabel>
@@ -371,9 +290,15 @@ export function LibraryTree({
             <Tree aria-labelledby={projectsHeadingId} {...treeProps}>
               {model.projects.map((scope) => (
                 <ScopeItem
-                  favorite={favoritePaths.has(scope.path)}
                   key={scope.id}
                   scope={scope}
+                  star={
+                    <FavoriteStar
+                      onToggle={onToggleFavorite}
+                      scope={scope}
+                      starred={favoritePaths.has(scope.path)}
+                    />
+                  }
                 />
               ))}
             </Tree>

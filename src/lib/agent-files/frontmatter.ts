@@ -1,4 +1,4 @@
-export type LineEnding = "\n" | "\r\n";
+import { dominantLineEnding, type LineEnding } from "./line-endings";
 
 export interface FrontmatterSplit {
   /** YAML text between the fences, fences excluded; null when the document has none */
@@ -13,17 +13,12 @@ export interface FrontmatterSplit {
 
 const OPEN_FENCE_PATTERN = /^(?:\uFEFF)?---[^\S\r\n]*\r?\n/;
 const CLOSE_FENCE_PATTERN = /^---[^\S\r\n]*$/;
-const CRLF_PATTERN = /\r\n/;
-
-function detectLineEnding(content: string): LineEnding {
-  return CRLF_PATTERN.test(content) ? "\r\n" : "\n";
-}
 
 function withoutFrontmatter(content: string): FrontmatterSplit {
   return {
     frontmatter: null,
     body: content,
-    lineEnding: detectLineEnding(content),
+    lineEnding: dominantLineEnding(content),
     prefix: "",
     suffix: "",
   };

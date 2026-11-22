@@ -1,5 +1,5 @@
-import type { ControlUiSkin } from "@ctrl-ui/react/skin";
 import { SkinProvider } from "@ctrl-ui/react/skin-provider";
+import { skin } from "@ctrl-ui/react/skins/refined";
 import { Toaster } from "@ctrl-ui/react/ui/toast";
 import { TooltipProvider } from "@ctrl-ui/react/ui/tooltip";
 import { isTauri } from "@tauri-apps/api/core";
@@ -13,15 +13,6 @@ import { ViewBoundary } from "./shared/components/error-boundary";
 import "./index.css";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
-/** Mirrors `data-skin` on `<html>`, which is what the skin stylesheet matches. */
-const SKIN_ID = "adt";
-
-const skin = {
-  id: SKIN_ID,
-  sidebarLayout: "inset",
-  scrollAreaScrollbarVisibility: "hover",
-} satisfies ControlUiSkin;
-
 function syncTheme(isDark: boolean) {
   document.documentElement.classList.toggle("dark", isDark);
 }

@@ -1,8 +1,7 @@
 import type { FileRow, Root } from "@/lib/ipc-types";
 
-import { parentPath } from "./library-model";
+import { parentPath } from "./library-paths";
 
-/** A directory that holds skill folders, e.g. `~/.claude/skills`. */
 export interface SkillLocation {
   path: string;
   /** Skills already living there; zero for a suggested but still empty location. */
@@ -11,8 +10,8 @@ export interface SkillLocation {
   personal: boolean;
 }
 
-/** Where agents look for per-user skills, most widely supported first. */
-const PERSONAL_SKILL_DIRS = [".claude/skills", ".agents/skills"] as const;
+/** Most widely supported first. */
+const SKILL_DIRS = [".claude/skills", ".agents/skills"] as const;
 
 export function isInsideRoots(path: string, roots: readonly Root[]): boolean {
   return roots.some(
@@ -21,11 +20,7 @@ export function isInsideRoots(path: string, roots: readonly Root[]): boolean {
   );
 }
 
-/**
- * Every place a new skill can go without the user typing a path: the folders
- * that already hold skills, plus the personal folders the indexed home allows.
- * Personal folders lead in the order agents support them, then the busiest folders.
- */
+/** Folders already holding skills plus the personal ones the indexed home allows: personal first, by support, then busiest. */
 export function skillLocations(
   files: readonly FileRow[],
   roots: readonly Root[],
@@ -41,7 +36,7 @@ export function skillLocations(
 
   const personalRanks = new Map<string, number>();
   if (home !== null) {
-    for (const [rank, relative] of PERSONAL_SKILL_DIRS.entries()) {
+    for (const [rank, relative] of SKILL_DIRS.entries()) {
       const path = `${home}/${relative}`;
       if (isInsideRoots(path, roots)) {
         personalRanks.set(path, rank);
@@ -50,7 +45,7 @@ export function skillLocations(
     }
   }
 
-  const unranked = PERSONAL_SKILL_DIRS.length;
+  const unranked = SKILL_DIRS.length;
   return [...counts]
     .map(([path, skillCount]) => ({
       path,
@@ -66,7 +61,17 @@ export function skillLocations(
     );
 }
 
-/** The absolute path of the `SKILL.md` a skill named `name` gets in `location`. */
+export function projectSkillLocation(
+  locations: readonly SkillLocation[],
+  project: string
+): string {
+  const candidates = SKILL_DIRS.map((relative) => `${project}/${relative}`);
+  return (
+    locations.find((location) => candidates.includes(location.path))?.path ??
+    `${project}/${SKILL_DIRS[0]}`
+  );
+}
+
 export function skillFilePath(location: string, name: string): string {
   return `${location}/${name}/SKILL.md`;
 }

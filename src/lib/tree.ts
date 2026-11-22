@@ -5,6 +5,7 @@ export const TREE_ROOT_ID = "root";
 export interface TreeNode {
   id: string;
   name: string;
+  path: string;
   isFolder: boolean;
   file: FileRow | null;
   childIds: string[];
@@ -29,6 +30,16 @@ export function fileIdOf(nodeId: string): number | null {
 
 function folderNodeId(rootId: number, segments: string[]): string {
   return `dir:${rootId}:${segments.join("/")}`;
+}
+
+/** The branches above a file, root first: what has to open to show it. */
+export function folderIdsOf(
+  file: Pick<FileRow, "rootId" | "relPath">
+): string[] {
+  const segments = file.relPath.split(SEPARATOR_PATTERN).filter(Boolean);
+  return segments.map((_, depth) =>
+    folderNodeId(file.rootId, segments.slice(0, depth))
+  );
 }
 
 function ensureNode(index: TreeIndex, node: TreeNode): TreeNode {
@@ -73,6 +84,7 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
     [TREE_ROOT_ID]: {
       id: TREE_ROOT_ID,
       name: "",
+      path: "",
       isFolder: true,
       file: null,
       childIds: [],
@@ -90,6 +102,7 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
     const node = ensureNode(index, {
       id: folderNodeId(rootId, []),
       name: rootLabel(root),
+      path: root.path,
       isFolder: true,
       file: null,
       childIds: [],
@@ -98,7 +111,8 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
   }
 
   for (const file of files) {
-    if (!rootsById.has(file.rootId)) {
+    const root = rootsById.get(file.rootId);
+    if (!root) {
       continue;
     }
     const segments = file.relPath.split(SEPARATOR_PATTERN).filter(Boolean);
@@ -118,6 +132,7 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
       const folder = ensureNode(index, {
         id: folderNodeId(file.rootId, walked),
         name: segment,
+        path: `${root.path}/${walked.join("/")}`,
         isFolder: true,
         file: null,
         childIds: [],
@@ -129,6 +144,7 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
     const leaf = ensureNode(index, {
       id: fileNodeId(file.id),
       name: fileName,
+      path: file.path,
       isFolder: false,
       file,
       childIds: [],
@@ -140,7 +156,7 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
   return index;
 }
 
-export function expandedFolderIds(index: TreeIndex): string[] {
+export function folderIds(index: TreeIndex): string[] {
   return Object.values(index)
     .filter((node) => node.isFolder && node.id !== TREE_ROOT_ID)
     .map((node) => node.id);

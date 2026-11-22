@@ -1,10 +1,13 @@
 import { Button } from "@ctrl-ui/react/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@ctrl-ui/react/ui/dropdown-menu";
 import {
@@ -26,15 +29,25 @@ import { Heading, Text } from "@ctrl-ui/react/ui/typography";
 import { ListFilter, Plus, RefreshCw, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { ProjectSwitcher } from "@/features/projects/project-switcher";
 import type { UseScan } from "@/features/scan/use-scan";
+import { useHomeDirectory } from "@/lib/home-dir";
 import type { FileRow } from "@/lib/ipc-types";
 import { IconButton } from "@/shared/components/icon-button";
 
-import { filterFiles } from "./library-model";
-import { LibraryTree, type LibraryTreeMode } from "./library-tree";
+import { buildLibraryModel, filterFiles } from "./library-model";
+import { filesInProject } from "./library-projects";
+import {
+  LibraryTree,
+  type LibraryTreeMode,
+  type LibraryTreeProps,
+} from "./library-tree";
+import { withoutSubProjects } from "./sub-projects";
 import type { LibraryIndex } from "./use-library-index";
 
 const MODE_STORAGE_KEY = "another-dev-tool.library-mode";
+const SUB_PROJECTS_STORAGE_KEY = "another-dev-tool.library-sub-projects";
+const ALIASES_STORAGE_KEY = "another-dev-tool.library-links";
 
 function readStoredMode(): LibraryTreeMode {
   return window.localStorage.getItem(MODE_STORAGE_KEY) === "folders"
@@ -42,14 +55,27 @@ function readStoredMode(): LibraryTreeMode {
     : "grouped";
 }
 
+function readStoredShowSubProjects(): boolean {
+  return window.localStorage.getItem(SUB_PROJECTS_STORAGE_KEY) !== "hidden";
+}
+
+function readStoredShowAliases(): boolean {
+  return window.localStorage.getItem(ALIASES_STORAGE_KEY) !== "hidden";
+}
+
 export interface LibraryPanelProps {
   index: LibraryIndex;
   scan: UseScan;
   selectedFileId: number | null;
+  selectedAlias: string | null;
   favoritePaths: ReadonlySet<string>;
-  onSelectFile: (file: FileRow) => void;
+  onToggleFavorite: (path: string) => Promise<void>;
+  project: string | null;
+  onOpenProject: (path: string | null) => void;
+  onSelectFile: (file: FileRow, alias: string | null) => void;
   onNewSkill: () => void;
   onOpenSettings: () => void;
+  onReference?: LibraryTreeProps["onReference"];
 }
 
 function PanelMessage({
@@ -109,7 +135,7 @@ function ScanFooter({
         numeric
         size="caption"
         title={scan.error ?? undefined}
-        tone={scan.error ? "destructive" : "muted"}
+        tone={scan.error ? "danger" : "muted"}
       >
         {scan.error ??
           (shown === total
@@ -127,17 +153,49 @@ export function LibraryPanel({
   index,
   scan,
   selectedFileId,
+  selectedAlias,
   favoritePaths,
+  onToggleFavorite,
+  project,
+  onOpenProject,
   onSelectFile,
   onNewSkill,
   onOpenSettings,
+  onReference,
 }: LibraryPanelProps) {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<LibraryTreeMode>(readStoredMode);
-  const visible = useMemo(
-    () => filterFiles(index.files, search),
-    [index.files, search]
+  const [showSubProjects, setShowSubProjects] = useState(
+    readStoredShowSubProjects
   );
+  const [showAliases, setShowAliases] = useState(readStoredShowAliases);
+  const home = useHomeDirectory();
+  const listsLinks = showAliases && mode === "grouped";
+  const scoped = useMemo(
+    () =>
+      showSubProjects ? index.files : withoutSubProjects(index.files, home),
+    [index.files, showSubProjects, home]
+  );
+  const projects = useMemo(
+    () =>
+      buildLibraryModel(
+        scoped,
+        index.roots,
+        home,
+        favoritePaths,
+        scoped,
+        listsLinks
+      ).projects,
+    [scoped, index.roots, home, favoritePaths, listsLinks]
+  );
+  const listed = useMemo(
+    () =>
+      project === null
+        ? scoped
+        : filesInProject(scoped, index.roots, home, project, listsLinks),
+    [scoped, index.roots, home, project, listsLinks]
+  );
+  const visible = useMemo(() => filterFiles(listed, search), [listed, search]);
   const searching = search.trim().length > 0;
 
   let body = (
@@ -145,10 +203,16 @@ export function LibraryPanel({
       expandAll={searching}
       favoritePaths={favoritePaths}
       files={visible}
+      indexedFiles={index.files}
       mode={mode}
+      onReference={onReference}
       onSelectFile={onSelectFile}
+      onToggleFavorite={onToggleFavorite}
+      project={project}
       roots={index.roots}
+      selectedAlias={selectedAlias}
       selectedFileId={selectedFileId}
+      showAliases={showAliases}
     />
   );
   if (index.error) {
@@ -195,12 +259,21 @@ export function LibraryPanel({
     <>
       <SidebarHeader>
         <div
-          className="flex h-(--sidebar-strip-height) items-center gap-1 ps-4"
+          className="flex h-(--sidebar-strip-height) items-center gap-1 ps-2"
           data-tauri-drag-region="deep"
         >
-          <Heading className="min-w-0 flex-1" level={2} size="label">
+          <Heading className="sr-only" level={2}>
             Library
           </Heading>
+          <div className="flex min-w-0 flex-1">
+            <ProjectSwitcher
+              favoritePaths={favoritePaths}
+              onOpen={onOpenProject}
+              onToggleFavorite={onToggleFavorite}
+              project={project}
+              projects={projects}
+            />
+          </div>
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label="List options"
@@ -227,6 +300,36 @@ export function LibraryPanel({
                   Folder
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Show</DropdownMenuLabel>
+                <DropdownMenuCheckboxItem
+                  checked={showSubProjects}
+                  onCheckedChange={(next: boolean) => {
+                    setShowSubProjects(next);
+                    window.localStorage.setItem(
+                      SUB_PROJECTS_STORAGE_KEY,
+                      next ? "shown" : "hidden"
+                    );
+                  }}
+                >
+                  Monorepo sub-projects
+                </DropdownMenuCheckboxItem>
+                {mode === "grouped" ? (
+                  <DropdownMenuCheckboxItem
+                    checked={showAliases}
+                    onCheckedChange={(next: boolean) => {
+                      setShowAliases(next);
+                      window.localStorage.setItem(
+                        ALIASES_STORAGE_KEY,
+                        next ? "shown" : "hidden"
+                      );
+                    }}
+                  >
+                    Links
+                  </DropdownMenuCheckboxItem>
+                ) : null}
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
           <IconButton label="New skill" onClick={onNewSkill} shortcut="⌘N">
@@ -235,7 +338,7 @@ export function LibraryPanel({
         </div>
         <InputGroup size="sm">
           <InputGroupAddon>
-            <Search aria-hidden="true" className="size-3.5" />
+            <Search aria-hidden="true" />
           </InputGroupAddon>
           <Input
             aria-label="Search the library"
@@ -270,7 +373,7 @@ export function LibraryPanel({
           <ScanFooter
             scan={scan}
             shown={visible.length}
-            total={index.files.length}
+            total={listed.length}
           />
         </div>
       </SidebarFooter>

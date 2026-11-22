@@ -19,7 +19,7 @@ export function PromptAttachmentStrip({
         <RevealScope
           key={attachment.id}
           render={
-            <li className="relative size-16 overflow-hidden rounded-md bg-muted" />
+            <li className="bg-muted relative size-16 overflow-hidden rounded-md" />
           }
         >
           <AttachmentPreview attachment={attachment} index={index} />
@@ -115,7 +115,7 @@ function AttachmentPreview({
 
   if (preview.status === "failed") {
     return (
-      <span className="flex size-full items-center justify-center text-muted-foreground">
+      <span className="text-muted-foreground flex size-full items-center justify-center">
         <ImageOff aria-hidden="true" className="size-4" />
         <span className="sr-only">Image {index + 1} could not be loaded</span>
       </span>
@@ -123,7 +123,7 @@ function AttachmentPreview({
   }
 
   return (
-    <span className="flex size-full items-center justify-center text-muted-foreground">
+    <span className="text-muted-foreground flex size-full items-center justify-center">
       <ImageIcon aria-hidden="true" className="size-4" />
     </span>
   );

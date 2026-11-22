@@ -22,7 +22,6 @@ function useClampOverflow(content: string, expanded: boolean) {
 
   // Measured, not guessed from the length: whether four lines hold a prompt
   // depends on the column width, and "Show more" must always reveal something.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a row handed new text must be measured again
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element || expanded) {
@@ -78,7 +77,7 @@ export function PromptHistoryItem({
         <Text
           as="p"
           className={cn(
-            "whitespace-pre-wrap break-words",
+            "break-words whitespace-pre-wrap",
             !expanded && "line-clamp-4"
           )}
           id={contentId}
@@ -155,7 +154,7 @@ function DestinationPath({
     <span className="flex min-w-0 items-center gap-1.5" title={path}>
       <Folder
         aria-hidden="true"
-        className="size-3 shrink-0 text-muted-foreground"
+        className="text-muted-foreground size-3 shrink-0"
       />
       <span className="flex min-w-0">
         <Text as="span" className="truncate" mono size="caption" tone="muted">

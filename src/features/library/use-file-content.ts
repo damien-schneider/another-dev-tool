@@ -11,7 +11,6 @@ import {
   splitFrontmatter,
 } from "@/lib/agent-files/frontmatter";
 
-import { prepareRichDocument } from "@/lib/document-markdown";
 import { onIndexUpdated } from "@/lib/events";
 import {
   type FrontmatterKey,
@@ -19,7 +18,8 @@ import {
 } from "@/lib/frontmatter-fields";
 import { type IpcError, readFile, toIpcError, writeFile } from "@/lib/ipc";
 import type { FileContent } from "@/lib/ipc-types";
-import type { PreservedMarkdown } from "@/lib/markdown-preserve";
+
+import { type FileLock, useFileLock } from "./use-file-lock";
 
 /** `rich` is the visual editor; `raw` is the whole file as text, frontmatter included. */
 export type EditorMode = "rich" | "raw";
@@ -28,14 +28,10 @@ export interface FileBuffer {
   body: string;
   content: FileContent;
   raw: string;
-  /** The body prepared for the visual editor; null when only source editing is safe. */
-  rich: PreservedMarkdown | null;
   split: FrontmatterSplit;
 }
 
-export interface UseFileContent {
-  /** Gives up on the visual editor for this document and continues in source. */
-  abandonRich: () => void;
+export interface UseFileContent extends FileLock {
   buffer: FileBuffer | null;
   changedOnDisk: boolean;
   conflict: boolean;
@@ -55,8 +51,7 @@ export interface UseFileContent {
   setBody: (body: string) => void;
   /** Returns false when the frontmatter cannot be edited field by field. */
   setFrontmatterField: (key: FrontmatterKey, value: string) => boolean;
-  /** Returns false when the visual editor cannot show the document as it stands. */
-  setMode: (mode: EditorMode) => boolean;
+  setMode: (mode: EditorMode) => void;
   setRaw: (raw: string) => void;
 }
 
@@ -67,7 +62,6 @@ function toBuffer(content: FileContent, text = content.content): FileBuffer {
     split,
     body: split.body,
     raw: text,
-    rich: prepareRichDocument(split.body),
   };
 }
 
@@ -82,10 +76,13 @@ interface FileError {
   message: string;
 }
 
-export function useFileContent(fileId: number | null): UseFileContent {
+export function useFileContent(
+  fileId: number | null,
+  openedThroughLink: string | null
+): UseFileContent {
   const [buffer, setBuffer] = useState<FileBuffer | null>(null);
   const [revision, setRevision] = useState(0);
-  const [preferredMode, setPreferredMode] = useState<EditorMode>("rich");
+  const [mode, setCurrentMode] = useState<EditorMode>("rich");
   const [loadingFileId, setLoadingFileId] = useState<number | null>(null);
   const [savingFileId, setSavingFileId] = useState<number | null>(null);
   const [error, setError] = useState<FileError | null>(null);
@@ -150,12 +147,11 @@ export function useFileContent(fileId: number | null): UseFileContent {
     fileId !== null &&
     currentError === null &&
     (currentBuffer === null || loadingFileId === fileId);
-  const mode: EditorMode =
-    preferredMode === "rich" && currentBuffer?.rich ? "rich" : "raw";
   const documentText = currentBuffer ? documentOf(currentBuffer, mode) : "";
   const dirty = currentBuffer
     ? documentText !== currentBuffer.content.content
     : false;
+  const lock = useFileLock(currentBuffer?.content ?? null, openedThroughLink);
 
   // What is on screen when a disk read comes back, which may be long after it was asked for.
   const latest = useRef({ buffer: currentBuffer, dirty });
@@ -196,34 +192,20 @@ export function useFileContent(fileId: number | null): UseFileContent {
   }, [fileId]);
 
   const setMode = useCallback(
-    (next: EditorMode): boolean => {
+    (next: EditorMode) => {
       if (!currentBuffer || next === mode) {
-        return next === mode;
+        return;
       }
       if (next === "raw") {
         setBuffer({ ...currentBuffer, raw: documentOf(currentBuffer, "rich") });
-        setPreferredMode("raw");
-        return true;
+      } else {
+        const split = splitFrontmatter(currentBuffer.raw);
+        show({ ...currentBuffer, split, body: split.body });
       }
-      const split = splitFrontmatter(currentBuffer.raw);
-      const rich = prepareRichDocument(split.body);
-      if (!rich) {
-        return false;
-      }
-      show({ ...currentBuffer, split, body: split.body, rich });
-      setPreferredMode("rich");
-      return true;
+      setCurrentMode(next);
     },
     [currentBuffer, mode, show]
   );
-
-  const abandonRich = useCallback(() => {
-    setBuffer((previous) =>
-      previous?.content.fileId === fileId
-        ? { ...previous, raw: documentOf(previous, "rich"), rich: null }
-        : previous
-    );
-  }, [fileId]);
 
   const setBody = useCallback(
     (body: string) => {
@@ -378,8 +360,8 @@ export function useFileContent(fileId: number | null): UseFileContent {
     conflict: fileId !== null && conflictFileId === fileId,
     changedOnDisk: fileId !== null && changedOnDiskFileId === fileId,
     documentText,
+    ...lock,
     setMode,
-    abandonRich,
     setBody,
     setRaw,
     setFrontmatterField,

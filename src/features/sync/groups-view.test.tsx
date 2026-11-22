@@ -73,6 +73,7 @@ function skill(id: number, folder: string): FileRow {
     description: null,
     aliases: [],
     projectDir: null,
+    repositoryDir: null,
     size: 1,
     mtimeNs: 1,
     hash: `h${id}`,

@@ -1,124 +1,229 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AgentDeltaEvent, AgentDoneEvent } from "@/lib/ipc-types";
-
+import type { AgentReference } from "./agent-references";
 import { useAgentSession } from "./use-agent-session";
+import {
+  emitDelta,
+  emitDone,
+  emitPart,
+  kinds,
+  mocks,
+  READ,
+  resetMocks,
+  SETTINGS,
+  said,
+  TEXT,
+  THINKING,
+  texts,
+} from "./use-agent-session.harness";
 
-const mocks = vi.hoisted(() => ({
-  agentSend: vi.fn(),
-  agentCancel: vi.fn(),
-  agentStatus: vi.fn(),
-  handlers: {
-    delta: [] as ((payload: AgentDeltaEvent) => void)[],
-    done: [] as ((payload: AgentDoneEvent) => void)[],
-  },
-}));
+vi.mock(
+  "@/lib/events",
+  async () => (await import("./use-agent-session.harness")).eventsModule
+);
+vi.mock(
+  "@/lib/ipc",
+  async () => (await import("./use-agent-session.harness")).ipcModule
+);
 
-vi.mock("@/lib/events", () => ({
-  onAgentDelta: (handler: (payload: AgentDeltaEvent) => void) => {
-    mocks.handlers.delta.push(handler);
-    return Promise.resolve(() => undefined);
-  },
-  onAgentTool: () => Promise.resolve(() => undefined),
-  onAgentDone: (handler: (payload: AgentDoneEvent) => void) => {
-    mocks.handlers.done.push(handler);
-    return Promise.resolve(() => undefined);
-  },
-  onAgentError: () => Promise.resolve(() => undefined),
-}));
+beforeEach(resetMocks);
 
-vi.mock("@/lib/ipc", () => ({
-  agentSend: mocks.agentSend,
-  agentCancel: mocks.agentCancel,
-  agentStatus: mocks.agentStatus,
-  toIpcError: (cause: unknown) =>
-    cause instanceof Error ? cause : new Error(String(cause)),
-}));
-
-const emitDelta = (payload: AgentDeltaEvent) => {
-  for (const handler of mocks.handlers.delta) {
-    handler(payload);
-  }
-};
-
-const emitDone = (payload: AgentDoneEvent) => {
-  for (const handler of mocks.handlers.done) {
-    handler(payload);
-  }
-};
-
-beforeEach(() => {
-  mocks.handlers.delta = [];
-  mocks.handlers.done = [];
-  mocks.agentSend.mockReset().mockResolvedValue(7);
-  mocks.agentCancel.mockReset().mockResolvedValue(null);
-  mocks.agentStatus
-    .mockReset()
-    .mockResolvedValue({ available: true, path: "/bin/claude", version: "1" });
-});
-
-async function sendOnce() {
-  const view = renderHook(({ fileId }) => useAgentSession(fileId), {
-    initialProps: { fileId: 1 as number | null },
+function open(fileId: number | null = 1) {
+  return renderHook(({ file }) => useAgentSession(file), {
+    initialProps: { file: fileId },
   });
-  await act(async () => {
-    await view.result.current.send("tighten it", "# Before");
-  });
-  return view;
 }
 
+async function ask(
+  view: ReturnType<typeof open>,
+  prompt = "tighten it",
+  document = "# Before"
+) {
+  await act(async () => {
+    await view.result.current.send({ prompt, images: [] }, document, SETTINGS);
+  });
+}
+
+const SCREENSHOT = {
+  id: "screenshot-1",
+  name: "CleanShot.png",
+  mediaType: "image/png" as const,
+  base64: "iVBORw0KGgo=",
+  width: 1568,
+  height: 980,
+};
+
 describe("useAgentSession", () => {
-  it("grows one message while a block streams, and opens a new one after it", async () => {
-    const { result } = await sendOnce();
+  it("sends pasted images with the request and keeps them on the asked message", async () => {
+    const view = open();
+
+    await act(async () => {
+      await view.result.current.send(
+        { prompt: "match this layout", images: [SCREENSHOT] },
+        "# Before",
+        SETTINGS
+      );
+    });
+
+    expect(mocks.agentSend).toHaveBeenCalledWith({
+      fileId: 1,
+      conversationId: null,
+      content: "# Before",
+      prompt: "match this layout",
+      images: [SCREENSHOT],
+      references: [],
+      settings: SETTINGS,
+    });
+    expect(view.result.current.messages).toEqual([
+      expect.objectContaining({
+        role: "you",
+        text: "match this layout",
+        images: [SCREENSHOT],
+      }),
+    ]);
+  });
+
+  it("leaves the open file out of a request once it is removed, until the next file", async () => {
+    const view = open();
+
+    act(() => view.result.current.includeFile(false));
+    await ask(view, "what does interface hold?");
+
+    expect(mocks.agentSend).toHaveBeenCalledWith(
+      expect.objectContaining({ content: null })
+    );
+    view.rerender({ file: 2 });
+    expect(view.result.current.includesFile).toBe(true);
+  });
+
+  it("grows one answer while it streams, across its text blocks", async () => {
+    const view = open();
+    await ask(view);
 
     act(() => {
-      emitDelta({ runId: 7, block: 1, text: "Tight" });
-      emitDelta({ runId: 7, block: 1, text: "ened." });
-      emitDelta({ runId: 7, block: 2, text: "Done." });
+      emitPart(0, TEXT);
+      emitDelta({ runId: 7, index: 0, text: "Tight" });
+      emitDelta({ runId: 7, index: 0, text: "ened." });
+      emitPart(1, TEXT);
+      emitDelta({ runId: 7, index: 1, text: "Done." });
     });
 
-    await waitFor(() => {
-      expect(result.current.messages.map((message) => message.text)).toEqual([
+    await waitFor(() =>
+      expect(texts(view.result.current.messages)).toEqual([
         "tighten it",
-        "Tightened.",
-        "Done.",
-      ]);
+        "Tightened.\n\nDone.",
+      ])
+    );
+  });
+
+  it("keeps thinking and tool steps in order, out of the answer text", async () => {
+    const view = open();
+    await ask(view);
+
+    act(() => {
+      emitPart(0, THINKING);
+      emitDelta({ runId: 7, index: 0, text: "Let me look." });
     });
+    expect(kinds(view.result.current.messages)).toEqual(["thinking"]);
+
+    act(() => emitPart(1, READ));
+    expect(kinds(view.result.current.messages)).toEqual(["thinking", "tool"]);
+
+    act(() => {
+      emitPart(2, TEXT);
+      emitDelta({ runId: 7, index: 2, text: "Done." });
+    });
+    await waitFor(() =>
+      expect(texts(view.result.current.messages)).toEqual([
+        "tighten it",
+        "Done.",
+      ])
+    );
+  });
+
+  it("keeps the answer's key once the saved copy replaces the live one", async () => {
+    const view = open();
+    await ask(view);
+    act(() => {
+      emitPart(0, TEXT);
+      emitDelta({ runId: 7, index: 0, text: "Tightened." });
+    });
+    const live = view.result.current.messages.at(-1)?.key;
+
+    mocks.agentConversation.mockResolvedValue([
+      said(1, "you", "tighten it"),
+      said(2, "agent", "Tightened."),
+    ]);
+    act(() => emitDone({ runId: 7, proposal: null, cancelled: false }));
+
+    await waitFor(() =>
+      expect(view.result.current.messages.at(-1)?.key).toBe(live)
+    );
+    expect(texts(view.result.current.messages)).toEqual([
+      "tighten it",
+      "Tightened.",
+    ]);
   });
 
   it("surfaces the edited document once the run reports back", async () => {
-    const { result } = await sendOnce();
+    const view = open();
+    await ask(view);
 
     act(() => emitDone({ runId: 7, proposal: "# After", cancelled: false }));
 
     await waitFor(() => {
-      expect(result.current.proposal).toBe("# After");
-      expect(result.current.running).toBe(false);
+      expect(view.result.current.proposal).toBe("# After");
+      expect(view.result.current.running).toBe(false);
     });
   });
 
   it("ignores a run it does not own, so a stale reply cannot land", async () => {
-    const { result } = await sendOnce();
+    const view = open();
+    await ask(view);
 
     act(() => {
-      emitDelta({ runId: 99, block: 1, text: "ghost" });
+      emitPart(0, TEXT, 99);
+      emitDelta({ runId: 99, index: 0, text: "ghost" });
       emitDone({ runId: 99, proposal: "# Wrong", cancelled: false });
     });
 
-    expect(result.current.proposal).toBeNull();
-    expect(result.current.messages).toHaveLength(1);
-    expect(result.current.running).toBe(true);
+    expect(view.result.current.proposal).toBeNull();
+    expect(view.result.current.messages).toHaveLength(1);
+    expect(view.result.current.running).toBe(true);
   });
 
-  it("drops the transcript when another file is opened", async () => {
-    const view = await sendOnce();
-    act(() => emitDone({ runId: 7, proposal: "# After", cancelled: false }));
-    await waitFor(() => expect(view.result.current.proposal).toBe("# After"));
+  it("lets the agent read each reference on every request until another file opens", async () => {
+    const view = open();
+    const folder: AgentReference = {
+      path: "/skills/interface",
+      label: "interface",
+      kind: "folder",
+    };
+    const skill: AgentReference = {
+      path: "/skills/ux-rules",
+      label: "ux-rules",
+      kind: "skill",
+    };
 
-    view.rerender({ fileId: 2 });
+    act(() => {
+      view.result.current.addReference(folder);
+      view.result.current.addReference(skill);
+      view.result.current.addReference(folder);
+    });
+    act(() => view.result.current.removeReference(skill.path));
+    for (const prompt of ["match them", "and the intro"]) {
+      await ask(view, prompt);
+      act(() => emitDone({ runId: 7, proposal: null, cancelled: false }));
+      await waitFor(() => expect(view.result.current.running).toBe(false));
+    }
 
-    expect(view.result.current.messages).toEqual([]);
-    expect(view.result.current.proposal).toBeNull();
+    expect(mocks.agentSend).toHaveBeenCalledTimes(2);
+    for (const [request] of mocks.agentSend.mock.calls) {
+      expect(request.references).toEqual([folder.path]);
+    }
+    expect(view.result.current.references).toEqual([folder]);
+    view.rerender({ file: 2 });
+    expect(view.result.current.references).toEqual([]);
   });
 });

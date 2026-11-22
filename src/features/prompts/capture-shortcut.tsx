@@ -47,8 +47,8 @@ export function CaptureShortcut() {
     const accessUnlisten = onCaptureAccessChanged(setStatus).catch(
       () => undefined
     );
-    const progressUnlisten = onCaptureShortcutProgress(({ completedTaps }) => {
-      setCompletedTaps(completedTaps);
+    const progressUnlisten = onCaptureShortcutProgress((progress) => {
+      setCompletedTaps(progress.completedTaps);
       window.clearTimeout(feedbackTimerRef.current);
       feedbackTimerRef.current = window.setTimeout(
         () => setCompletedTaps(0),
@@ -96,7 +96,7 @@ export function CaptureShortcut() {
           <span className="sr-only">Shift twice</span> to save it here.
         </ItemDescription>
         {requestFailed ? (
-          <Text role="alert" size="label" tone="destructive">
+          <Text role="alert" size="label" tone="danger">
             Could not open the Accessibility settings.
           </Text>
         ) : null}

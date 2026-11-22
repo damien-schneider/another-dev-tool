@@ -273,7 +273,7 @@ export function FoldersSection({
       title="Folders"
     >
       {shownFailure === null ? null : (
-        <Alert variant="destructive">
+        <Alert tone="danger">
           <CircleAlert />
           <AlertTitle>The folders could not be updated</AlertTitle>
           <AlertDescription>{shownFailure}</AlertDescription>
@@ -294,7 +294,7 @@ export function FoldersSection({
       {hasFolders ? (
         <ul
           aria-label="Indexed folders"
-          className="flex flex-col divide-y divide-border"
+          className="divide-border flex flex-col divide-y"
         >
           {index.roots.map((root) => (
             <FolderRow

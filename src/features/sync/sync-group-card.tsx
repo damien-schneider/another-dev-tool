@@ -206,7 +206,7 @@ export function SyncGroupCard({
         )}
 
         {error ? (
-          <Alert variant="destructive">
+          <Alert tone="danger">
             <CircleAlert />
             <AlertTitle>The group was not changed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>

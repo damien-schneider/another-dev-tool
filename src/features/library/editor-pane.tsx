@@ -1,14 +1,25 @@
+import {
+  ChatWorkspace,
+  ChatWorkspaceInset,
+  ChatWorkspaceMain,
+} from "@ctrl-ui/react/chat-workspace";
+import { cn } from "@ctrl-ui/react/lib/cn";
 import { Button } from "@ctrl-ui/react/ui/button";
 import { Kbd } from "@ctrl-ui/react/ui/kbd";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@ctrl-ui/react/ui/resizable";
 import { ScrollArea } from "@ctrl-ui/react/ui/scroll-area";
 import { Skeleton } from "@ctrl-ui/react/ui/skeleton";
 import { Spinner } from "@ctrl-ui/react/ui/spinner";
 import { Text } from "@ctrl-ui/react/ui/typography";
 import { FileText, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-
 import { AgentPanel } from "@/features/agent/agent-panel";
-import { useAgentSession } from "@/features/agent/use-agent-session";
+import type { UseAgentSession } from "@/features/agent/use-agent-session";
+import { HistoryPanel } from "@/features/history/history-panel";
 import { LinksBar } from "@/features/links/links-bar";
 import { MentionPreview } from "@/features/links/mention-preview";
 import { useFileLinks } from "@/features/links/use-file-links";
@@ -20,7 +31,6 @@ import { scanSummary } from "@/features/scan/scan-status";
 import type { UseScan } from "@/features/scan/use-scan";
 import type { FileLinks, FileRow } from "@/lib/ipc-types";
 import { EmptyState, ErrorState } from "@/shared/components/view-layout";
-
 import {
   ConflictDialog,
   ReviewChangesDialog,
@@ -33,8 +43,10 @@ import { RichEditor } from "./editor/rich-editor";
 import { SourceEditor } from "./editor/source-editor";
 import { fileTitle } from "./library-model";
 import type { UseFileContent } from "./use-file-content";
+import type { UseSidePanel } from "./use-side-panel";
 
 export interface EditorPaneProps {
+  agent: UseAgentSession;
   editor: UseFileContent;
   favorite: boolean;
   file: FileRow | null;
@@ -46,12 +58,22 @@ export interface EditorPaneProps {
   /** Re-reads every library folder from disk; its outcome shows while nothing is open. */
   scan: UseScan;
   onOpenFile: (file: FileRow) => void;
+  openedThroughLink: string | null;
+  onShowOriginal: () => void;
   onToggleFavorite: (path: string) => Promise<void>;
+  sidePanel: UseSidePanel;
 }
 
 const DOCUMENT_COLUMN =
   "mx-auto flex w-full max-w-3xl flex-col gap-8 px-10 py-8";
-const AGENT_PANEL_STORAGE_KEY = "another-dev-tool.agent-panel";
+const SIDE_PANEL_WIDTH_STORAGE_KEY = "another-dev-tool.agent-panel-width";
+const SIDE_PANEL_DEFAULT_WIDTH = 384;
+const AGENT_DOCKED_STORAGE_KEY = "another-dev-tool.agent-docked";
+const AGENT_DOCKED_WIDTH_STORAGE_KEY = "another-dev-tool.agent-docked-width";
+
+function readStoredWidth(key: string) {
+  return Number(window.localStorage.getItem(key)) || SIDE_PANEL_DEFAULT_WIDTH;
+}
 
 function NothingOpen({
   hasFiles,
@@ -94,7 +116,7 @@ function NothingOpen({
                 </Button>
               </div>
               {failed ? (
-                <Text as="p" role="alert" size="caption" tone="destructive">
+                <Text as="p" role="alert" size="caption" tone="danger">
                   {scan.error}
                 </Text>
               ) : null}
@@ -166,12 +188,14 @@ function DocumentBody({
   }
 
   const label = `${fileTitle(file)} content`;
-  if (editor.mode === "raw" || !buffer.rich) {
+  const lockedLook = editor.readOnly ? "opacity-60" : undefined;
+  if (editor.mode === "raw") {
     return (
-      <div className="min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1 transition-opacity", lockedLook)}>
         <SourceEditor
           label={`${label}, as source`}
           onChange={editor.setRaw}
+          readOnly={editor.readOnly}
           value={buffer.raw}
         />
       </div>
@@ -180,28 +204,31 @@ function DocumentBody({
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div className={DOCUMENT_COLUMN}>
+      <div className={cn(DOCUMENT_COLUMN, "transition-opacity", lockedLook)}>
         <MetadataFields
           file={file}
           frontmatter={buffer.split.frontmatter}
           onChange={editor.setFrontmatterField}
           onEditSource={() => editor.setMode("raw")}
+          readOnly={editor.readOnly}
         />
         <LinksBar links={links} onSelect={onOpenFile} />
         <RichEditor
-          document={buffer.rich}
+          body={buffer.body}
           extensions={mentions.extensions}
           key={`${file.id}:${editor.revision}`}
           label={label}
           onChange={editor.setBody}
-          onUnsupported={editor.abandonRich}
+          readOnly={editor.readOnly}
         />
       </div>
+      <ChatWorkspaceInset />
     </ScrollArea>
   );
 }
 
 export function EditorPane({
+  agent,
   editor,
   favorite,
   file,
@@ -210,22 +237,22 @@ export function EditorPane({
   onNewSkill,
   scan,
   onOpenFile,
+  openedThroughLink,
+  onShowOriginal,
   onToggleFavorite,
+  sidePanel,
 }: EditorPaneProps) {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
-  // Docked by default, like the editor's other half; closing it is remembered.
-  const [agentOpen, setAgentOpen] = useState(
-    () => window.localStorage.getItem(AGENT_PANEL_STORAGE_KEY) !== "closed"
+  const [sidePanelWidth] = useState(() =>
+    readStoredWidth(SIDE_PANEL_WIDTH_STORAGE_KEY)
   );
-  const toggleAgent = (open: boolean) => {
-    setAgentOpen(open);
-    window.localStorage.setItem(
-      AGENT_PANEL_STORAGE_KEY,
-      open ? "open" : "closed"
-    );
-  };
-  const agent = useAgentSession(file?.id ?? null);
+  const [agentDocked] = useState(
+    () => window.localStorage.getItem(AGENT_DOCKED_STORAGE_KEY) === "true"
+  );
+  const [agentWidth] = useState(() =>
+    readStoredWidth(AGENT_DOCKED_WIDTH_STORAGE_KEY)
+  );
   const links = useFileLinks(file?.id ?? null);
   const mentions = useSkillMentions({
     targets: links.outgoing,
@@ -253,40 +280,100 @@ export function EditorPane({
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <section
-        aria-label={fileTitle(file)}
-        className="flex min-w-0 flex-1 flex-col"
-      >
-        <EditorHeader
-          agentOpen={agentOpen}
-          editor={editor}
-          favorite={favorite}
-          file={file}
-          onReview={() => setReviewOpen(true)}
-          onToggleAgent={() => toggleAgent(!agentOpen)}
-          onToggleFavorite={onToggleFavorite}
-          onTrash={() => setTrashOpen(true)}
-        />
-        <EditorNotices editor={editor} />
-        <DocumentBody
-          editor={editor}
-          file={file}
-          links={links}
-          mentions={mentions}
-          onOpenFile={onOpenFile}
-        />
-        <MentionPreview mentions={mentions} />
-      </section>
-
-      {agentOpen ? (
-        <AgentPanel
-          documentText={editor.documentText}
-          onApply={editor.replaceDocument}
-          onClose={() => toggleAgent(false)}
-          session={agent}
-        />
-      ) : null}
+    <>
+      <ResizablePanelGroup variant="nested">
+        <ResizablePanel className="flex" id="document" minSize="20rem">
+          <ChatWorkspace
+            className="min-w-0 flex-1"
+            defaultDocked={agentDocked}
+            defaultExpanded={false}
+            defaultPanelWidth={agentWidth}
+            onDockedChange={(docked) =>
+              window.localStorage.setItem(
+                AGENT_DOCKED_STORAGE_KEY,
+                String(docked)
+              )
+            }
+            onPanelWidthChange={(width) =>
+              window.localStorage.setItem(
+                AGENT_DOCKED_WIDTH_STORAGE_KEY,
+                String(width)
+              )
+            }
+          >
+            <ChatWorkspaceMain className="flex">
+              <section
+                aria-label={fileTitle(file)}
+                className="flex min-w-0 flex-1 flex-col"
+              >
+                <EditorHeader
+                  editor={editor}
+                  favorite={favorite}
+                  file={file}
+                  onReview={() => setReviewOpen(true)}
+                  onToggleFavorite={onToggleFavorite}
+                  onToggleSidePanel={sidePanel.toggle}
+                  onTrash={() => setTrashOpen(true)}
+                  sidePanel={sidePanel.panel}
+                />
+                <EditorNotices
+                  editor={editor}
+                  onShowOriginal={onShowOriginal}
+                  openedThroughLink={openedThroughLink}
+                />
+                <DocumentBody
+                  editor={editor}
+                  file={file}
+                  links={links}
+                  mentions={mentions}
+                  onOpenFile={onOpenFile}
+                />
+                <MentionPreview mentions={mentions} />
+              </section>
+            </ChatWorkspaceMain>
+            {sidePanel.panel === "agent" ? (
+              <AgentPanel
+                documentText={editor.documentText}
+                file={file}
+                onApply={(text) => {
+                  editor.editAnyway();
+                  editor.replaceDocument(text);
+                }}
+                onClose={() => sidePanel.toggle("agent")}
+                session={agent}
+              />
+            ) : null}
+          </ChatWorkspace>
+        </ResizablePanel>
+        {sidePanel.panel === "history" ? (
+          <>
+            <ResizableHandle
+              aria-label="Resize History panel"
+              variant="hover"
+            />
+            <ResizablePanel
+              className="flex"
+              defaultSize={sidePanelWidth}
+              groupResizeBehavior="preserve-pixel-size"
+              id="side"
+              maxSize="40rem"
+              minSize="18rem"
+              onResize={(size) =>
+                window.localStorage.setItem(
+                  SIDE_PANEL_WIDTH_STORAGE_KEY,
+                  String(Math.round(size.inPixels))
+                )
+              }
+            >
+              <HistoryPanel
+                fileId={file.id}
+                onClose={() => sidePanel.toggle("history")}
+                savedHash={editor.buffer?.content.hash ?? null}
+              />
+            </ResizablePanel>
+          </>
+        ) : null}
+      </ResizablePanelGroup>
 
       <ReviewChangesDialog
         editor={editor}
@@ -301,6 +388,6 @@ export function EditorPane({
         onTrashed={onClose}
         open={trashOpen}
       />
-    </div>
+    </>
   );
 }

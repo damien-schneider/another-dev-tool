@@ -1,4 +1,10 @@
 {
   "identifier": "dev.anotherdevtool.desktop-dev",
-  "productName": "Another Dev Tool Dev"
+  "productName": "Another Dev Tool Dev",
+  "build": {
+    "beforeBuildCommand": "bun run build:dev"
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
 }

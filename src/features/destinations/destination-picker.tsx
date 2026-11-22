@@ -5,7 +5,6 @@ import {
   CommandInput,
   CommandList,
 } from "@ctrl-ui/react/ui/command";
-import { Kbd } from "@ctrl-ui/react/ui/kbd";
 import {
   Popover,
   PopoverContent,
@@ -22,13 +21,7 @@ import {
   FolderOpen,
   Star,
 } from "lucide-react";
-import {
-  type KeyboardEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 import { useHomeDirectory } from "@/lib/home-dir";
 import { resolveDestinationFolder, toIpcError } from "@/lib/ipc";
@@ -39,15 +32,17 @@ import {
   folderName,
   looksLikePath,
 } from "./destination-path";
-import { FolderRow, PickerRow } from "./destination-rows";
+import {
+  FolderRow,
+  isStarShortcut,
+  PickerNote,
+  PickerRow,
+  StarShortcutHint,
+} from "./destination-rows";
 import { useDestinationFolders } from "./use-destination-folders";
 
 const NO_DESTINATION_VALUE = "__none__";
 const TYPED_PATH_VALUE = "__typed__";
-const STAR_SHORTCUT_KEY = "d";
-const STAR_SHORTCUT_LABEL = navigator.platform.includes("Mac")
-  ? "⌘D"
-  : "Ctrl+D";
 
 export function DestinationPicker({
   disabled,
@@ -113,13 +108,8 @@ export function DestinationPicker({
     }
   };
 
-  // The star sits inside an option, out of the tab order: the keyboard reaches
-  // it through the row that is highlighted.
   const starHighlighted = (event: KeyboardEvent<HTMLDivElement>) => {
-    const starring =
-      (event.metaKey || event.ctrlKey) &&
-      event.key.toLowerCase() === STAR_SHORTCUT_KEY;
-    if (!starring) {
+    if (!isStarShortcut(event)) {
       return;
     }
     const folder = sections
@@ -206,6 +196,7 @@ export function DestinationPicker({
                     onSelect={choose}
                     onToggleFavorite={destinations.toggleFavorite}
                     selected={folder.path === value}
+                    selectedLabel="Current destination"
                   />
                 ))}
                 {section.hidden > 0 ? (
@@ -229,22 +220,12 @@ export function DestinationPicker({
             />
           </CommandList>
 
-          <div className="flex items-center justify-between gap-3 border-border border-t p-1">
+          <div className="border-border flex items-center justify-between gap-3 border-t p-1">
             <Button onClick={browse} size="sm" variant="ghost">
               <FolderOpen />
               Browse…
             </Button>
-            {sections.length > 0 ? (
-              <Text
-                as="span"
-                className="flex items-center gap-1.5 pe-2"
-                size="caption"
-                tone="muted"
-              >
-                <Kbd>{STAR_SHORTCUT_LABEL}</Kbd>
-                Star
-              </Text>
-            ) : null}
+            {sections.length > 0 ? <StarShortcutHint /> : null}
           </div>
         </Command>
       </PopoverContent>
@@ -287,14 +268,6 @@ function useTypedFolder(query: string): TypedFolder {
   return typed;
 }
 
-function PickerNote({ children }: { children: ReactNode }) {
-  return (
-    <Text as="p" className="px-2 py-1.5" size="label" tone="muted">
-      {children}
-    </Text>
-  );
-}
-
 function PickerStatus({
   empty,
   error,
@@ -314,7 +287,7 @@ function PickerStatus({
         className="flex items-center justify-between gap-3 px-2 py-1.5"
         role="alert"
       >
-        <Text size="label" tone="destructive">
+        <Text size="label" tone="danger">
           {error}
         </Text>
         <Button onClick={onRetry} size="xs" variant="surface">

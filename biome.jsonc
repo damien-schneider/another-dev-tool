@@ -1,4 +1,139 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
-  "extends": ["ultracite/biome/core", "ultracite/biome/react"]
+  "extends": ["@ctrl-ui/react/biome"],
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true,
+    "defaultBranch": "main"
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["**", "!**/*.md", "!**/*.html"]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 80
+  },
+  "javascript": {
+    "formatter": {
+      "trailingCommas": "es5"
+    }
+  },
+  "json": {
+    "formatter": {
+      "trailingCommas": "none"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedAttributes": "on"
+      }
+    }
+  },
+  "linter": {
+    "domains": {
+      "astro": "none",
+      "drizzle": "none",
+      "next": "none",
+      "playwright": "none",
+      "qwik": "none",
+      "reactNative": "none",
+      "solid": "none",
+      "svelte": "none",
+      "tanstackQuery": "none",
+      "turborepo": "none",
+      "vue": "none"
+    },
+    "rules": {
+      "preset": "all",
+      "a11y": {
+        "noAutofocus": "off"
+      },
+      "complexity": {
+        "noExcessiveCognitiveComplexity": {
+          "level": "error",
+          "options": { "maxAllowedComplexity": 20 }
+        },
+        "noExcessiveLinesPerFunction": "off",
+        "noImplicitCoercions": "off",
+        "noImportantStyles": "off",
+        "useMaxParams": "off"
+      },
+      "correctness": {
+        "noNodejsModules": "off",
+        "noProcessGlobal": "off",
+        "noUnresolvedImports": "off",
+        "useImportExtensions": "off",
+        "useJsonImportAttributes": "off",
+        "useUniqueElementIds": "off"
+      },
+      "nursery": {
+        "useTailwindSortedClasses": { "level": "error", "fix": "safe" }
+      },
+      "performance": {
+        "noAwaitInLoops": "off",
+        "noJsxPropsBind": "off"
+      },
+      "security": {
+        "noSecrets": "off"
+      },
+      "style": {
+        "noContinue": "off",
+        "noDefaultExport": "off",
+        "noExcessiveLinesPerFile": {
+          "level": "error",
+          "options": { "maxLines": 400 }
+        },
+        "noImplicitBoolean": "off",
+        "noInlineStyles": "off",
+        "noIncrementDecrement": "off",
+        "noJsxLiterals": "off",
+        "noMagicNumbers": "off",
+        "noProcessEnv": "off",
+        "noTernary": "off",
+        "useComponentExportOnlyModules": "off",
+        "useConsistentCurlyBraces": "off",
+        "useConsistentTypeDefinitions": {
+          "level": "error",
+          "options": { "style": "interface" }
+        },
+        "useDestructuring": "off",
+        "useDomQuerySelector": "off",
+        "useExplicitLengthCheck": "off",
+        "useExportsLast": "off",
+        "useFilenamingConvention": {
+          "level": "error",
+          "options": { "requireAscii": true, "filenameCases": ["kebab-case"] }
+        },
+        "useGlobalThis": "off",
+        "useNamedCaptureGroup": "off",
+        "useNamingConvention": "off",
+        "useSingleVarDeclarator": "off",
+        "useUnicodeRegex": "off"
+      },
+      "suspicious": {
+        "noConsole": "off",
+        "noUnnecessaryConditions": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/*.test.{ts,tsx}"],
+      "linter": {
+        "rules": {
+          "complexity": { "noExcessiveCognitiveComplexity": "off" }
+        }
+      }
+    }
+  ]
 }

@@ -4,13 +4,13 @@ Thank you for your interest in contributing to Another Dev Tool, a macOS app for
 
 ## Code Standards
 
-This project uses **Ultracite** to enforce strict code quality standards through automated formatting and linting (using Biome).
+Biome lints and formats the frontend (`biome.jsonc`, on top of the Control UI preset); TypeScript runs in strict mode (`tsconfig.json`). The pre-commit hook fixes staged files and runs the tests.
 
 ### Quick Commands
 
-- **Format code**: `bun x ultracite fix`
-- **Check for issues**: `bun x ultracite check`
-- **Diagnose setup**: `bun x ultracite doctor`
+- **Fix lint and formatting**: `bun run lint:fix`
+- **Check lint and formatting**: `bun run lint`
+- **Check types**: `bun run check-types`
 
 ### Core Principles
 
@@ -37,7 +37,7 @@ This project uses **Ultracite** to enforce strict code quality standards through
     ```
 5.  **Verify**: Ensure your code passes the quality checks:
     ```bash
-    bun x ultracite check && bun run check-types && bun run test && bun run test:rust
+    bun run lint && bun run check-types && bun run test && bun run test:rust
     ```
 6.  **Commit**: Use descriptive commit messages. Husky will run pre-commit hooks to ensure code quality.
 7.  **Submit a Pull Request**: Provide a clear description of your changes and why they are needed.

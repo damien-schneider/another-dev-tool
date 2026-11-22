@@ -4,11 +4,15 @@ import {
   LibraryBig,
   type LucideIcon,
   RefreshCw,
+  Repeat2,
+  Telescope,
 } from "lucide-react";
 
 export const VIEW_IDS = [
   "library",
+  "explain",
   "prompts",
+  "patterns",
   "duplicates",
   "sync",
   "settings",
@@ -23,7 +27,9 @@ export const PRIMARY_VIEWS: readonly {
   icon: LucideIcon;
 }[] = [
   { id: "library", label: "Library", icon: LibraryBig },
+  { id: "explain", label: "Explain", icon: Telescope },
   { id: "prompts", label: "Prompts", icon: History },
+  { id: "patterns", label: "Patterns", icon: Repeat2 },
   { id: "duplicates", label: "Duplicates", icon: Copy },
   { id: "sync", label: "Sync", icon: RefreshCw },
 ];

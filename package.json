@@ -7,18 +7,31 @@
     "dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "dev:vite": "vite",
     "build": "vite build",
+    "build:dev": "vite build --mode dev-app",
     "build:app": "tauri build",
+    "install:dev": "bun scripts/install-dev.ts",
     "version": "bun scripts/version.ts",
     "release": "bun scripts/release.ts",
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
-    "prepare": "husky"
+    "prepare": "husky",
+    "lint": "biome check",
+    "lint:fix": "biome check --write"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
-    "@ctrl-ui/react": "^0.9.19",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.13.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@ctrl-ui/react": "^0.11.2",
+    "@dagrejs/dagre": "^3.1.3",
+    "@lezer/common": "1.5.6",
+    "@lezer/markdown": "1.8.1",
+    "@tanstack/charts": "^1.1.0",
     "@tanstack/react-virtual": "^3.14.13",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
@@ -27,15 +40,7 @@
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.9.0",
-    "@tiptap/core": "3.31.4",
-    "@tiptap/extension-image": "3.31.4",
-    "@tiptap/extension-list": "3.31.4",
-    "@tiptap/extension-paragraph": "3.31.4",
-    "@tiptap/extension-table": "3.31.4",
-    "@tiptap/markdown": "3.31.4",
-    "@tiptap/pm": "3.31.4",
-    "@tiptap/react": "3.31.4",
-    "@tiptap/starter-kit": "3.31.4",
+    "@xyflow/react": "^12.12.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -50,7 +55,7 @@
     "yaml": "^2"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.3.11",
+    "@biomejs/biome": "^2.6.8",
     "@tailwindcss/vite": "^4.1.10",
     "@tauri-apps/cli": "^2.11.4",
     "@testing-library/dom": "^10.4.1",
@@ -62,24 +67,18 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
     "happy-dom": "^20.3.4",
-    "husky": "latest",
-    "lint-staged": "latest",
+    "husky": "9.1.7",
+    "lint-staged": "17.5.1",
     "tailwindcss": "^4.1.10",
     "typescript": "^5",
-    "ultracite": "7.0.12",
     "vite": "^7.3.6",
     "vitest": "^4.0.17"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,json,jsonc,css,scss,md,mdx}": [
-      "bun x ultracite fix"
-    ]
+    "*.{js,jsx,ts,tsx,json,jsonc,css}": "biome check --write --no-errors-on-unmatched"
   },
   "packageManager": "bun@1.3.5",
   "overrides": {
-    "prosemirror-model": "1.25.13",
-    "prosemirror-transform": "1.12.5",
-    "prosemirror-view": "1.42.9",
     "vite": "^7.3.6"
   }
 }

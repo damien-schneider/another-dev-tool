@@ -1,23 +1,20 @@
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import type { EditorView } from "@tiptap/pm/view";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { Extension } from "@tiptap/react";
+import { type Extension, type Range, StateEffect } from "@codemirror/state";
+import {
+  Decoration,
+  type DecorationSet,
+  type DOMEventHandlers,
+  EditorView,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 
 export const MENTION_ATTRIBUTE = "data-skill";
 const MENTION_CLASS = "skill-mention";
 const WORD_CHARACTER = /[a-z0-9-]/i;
 
-export type MentionDomEvents = Record<
-  string,
-  (view: EditorView, event: Event) => boolean
->;
+export type MentionDomEvents = DOMEventHandlers<unknown>;
 
-/**
- * Which names are linked is decided by the backend index; this store only carries
- * the current answer to the running editor. Every member is a closure on purpose:
- * `Extension.configure` deep-clones plain option objects, which would freeze a data
- * property at whatever it held when the editor was built.
- */
+/** The editor is built once per document, so the index's latest names reach it through this store. */
 export interface MentionStore {
   names: () => readonly string[];
   set: (names: readonly string[]) => void;
@@ -79,59 +76,58 @@ export function mentionRanges(
   return ranges;
 }
 
-const pluginKey = new PluginKey("skillMention");
+const namesChanged = StateEffect.define<null>();
 
-export const SkillMention = Extension.create<{
-  store: MentionStore;
-  domEvents: MentionDomEvents;
-}>({
-  name: "skillMention",
+function mentionDecorations(
+  view: EditorView,
+  names: readonly string[]
+): DecorationSet {
+  const mentions: Range<Decoration>[] = [];
+  for (const visible of view.visibleRanges) {
+    const text = view.state.sliceDoc(visible.from, visible.to);
+    for (const { name, from } of mentionRanges(text, names)) {
+      const start = visible.from + from;
+      mentions.push(
+        Decoration.mark({
+          class: MENTION_CLASS,
+          attributes: { [MENTION_ATTRIBUTE]: name },
+        }).range(start, start + name.length)
+      );
+    }
+  }
+  return Decoration.set(mentions, true);
+}
 
-  addOptions() {
-    return { store: createMentionStore(), domEvents: {} };
-  },
+function isNamesChange(update: ViewUpdate): boolean {
+  return update.transactions.some((transaction) =>
+    transaction.effects.some((effect) => effect.is(namesChanged))
+  );
+}
 
-  addProseMirrorPlugins() {
-    const { store, domEvents } = this.options;
-
-    return [
-      new Plugin({
-        key: pluginKey,
-        view(editorView) {
-          const unsubscribe = store.subscribe(() => {
-            editorView.dispatch(editorView.state.tr);
-          });
-          return { destroy: unsubscribe };
+export function skillMention(
+  store: MentionStore,
+  domEvents: MentionDomEvents
+): Extension {
+  const decorations = ViewPlugin.define(
+    (view) => {
+      const unsubscribe = store.subscribe(() => {
+        view.dispatch({ effects: namesChanged.of(null) });
+      });
+      return {
+        decorations: mentionDecorations(view, store.names()),
+        update(update) {
+          if (
+            update.docChanged ||
+            update.viewportChanged ||
+            isNamesChange(update)
+          ) {
+            this.decorations = mentionDecorations(update.view, store.names());
+          }
         },
-        props: {
-          handleDOMEvents: domEvents,
-          decorations(state) {
-            const names = store.names();
-            if (names.length === 0) {
-              return null;
-            }
-            const decorations: Decoration[] = [];
-            state.doc.descendants((node, position) => {
-              if (!(node.isText && node.text)) {
-                return;
-              }
-              for (const { name, from } of mentionRanges(node.text, names)) {
-                decorations.push(
-                  Decoration.inline(
-                    position + from,
-                    position + from + name.length,
-                    {
-                      class: MENTION_CLASS,
-                      [MENTION_ATTRIBUTE]: name,
-                    }
-                  )
-                );
-              }
-            });
-            return DecorationSet.create(state.doc, decorations);
-          },
-        },
-      }),
-    ];
-  },
-});
+        destroy: unsubscribe,
+      };
+    },
+    { decorations: (plugin) => plugin.decorations }
+  );
+  return [decorations, EditorView.domEventHandlers(domEvents)];
+}

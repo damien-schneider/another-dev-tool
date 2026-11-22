@@ -1,6 +1,8 @@
 @import "tailwindcss";
+@import "@xyflow/react/dist/base.css" layer(base);
 @import "@ctrl-ui/react/styles/index.css";
-@import "./skin.css";
+@import "@ctrl-ui/react/styles/skins/refined/skin-theme.css";
+@import "@ctrl-ui/react/styles/skins/refined/skin.css";
 
 @source "../node_modules/@ctrl-ui/react/dist";
 @source "../node_modules/streamdown/dist/*.js";
@@ -10,17 +12,21 @@
   --breakpoint-sidebar: 40rem;
 }
 
+/* The window has no native titlebar: these strips line up with the macOS traffic lights (x 16–78px). */
+:root {
+  --titlebar-height: 44px;
+  --sidebar-strip-height: 28px;
+  --sidebar-width-icon: 4.5rem;
+}
+
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
   html,
   body,
   #root {
     @apply h-full;
   }
   body {
-    @apply overflow-hidden bg-canvas font-body text-foreground antialiased;
+    @apply overflow-hidden bg-canvas font-body text-foreground;
   }
 
   /*
@@ -97,8 +103,14 @@ html.capture-overlay-window #root {
   @apply cursor-pointer rounded-sm underline decoration-primary/50 underline-offset-2 transition-colors hover:bg-primary/10 hover:decoration-primary motion-reduce:transition-none;
 }
 
-/* A block the visual editor cannot represent, kept as its Markdown text. */
-.document-editor pre:has(> code.language-markdown-source)::before {
-  @apply mb-2 block font-body text-caption text-muted-foreground;
-  content: "Kept as written";
+/* Reveal only fades its content: a hidden row action would still take room from the name. */
+@media (hover: hover) and (pointer: fine) {
+  [data-control-family="reveal"][data-slot="scope"]:not(
+      :hover,
+      :focus-within,
+      :has([data-popup-open])
+    )
+    [data-row-action] {
+    display: none;
+  }
 }

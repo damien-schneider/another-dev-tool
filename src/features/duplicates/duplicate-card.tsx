@@ -72,7 +72,7 @@ export function DuplicateCard({
     <Card aria-labelledby={titleId} role="group" size="sm">
       <CardHeader className="flex items-center gap-3">
         <FileKindIcon
-          className="size-4 shrink-0 text-muted-foreground"
+          className="text-muted-foreground size-4 shrink-0"
           kind={first.kind}
         />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -124,7 +124,7 @@ export function DuplicateCard({
           </Button>
         ) : null}
         {failure ? (
-          <Text as="p" role="alert" tone="destructive">
+          <Text as="p" role="alert" tone="danger">
             {failure}
           </Text>
         ) : null}

@@ -47,12 +47,13 @@ function fileContent(
     mtimeMs: 1,
     isSymlink: false,
     symlinkTarget: null,
+    managedBy: null,
     ...overrides,
   };
 }
 
 async function openFile(fileId = 7) {
-  const rendered = renderHook(() => useFileContent(fileId));
+  const rendered = renderHook(() => useFileContent(fileId, null));
   await waitFor(() => {
     expect(rendered.result.current.loading).toBe(false);
   });
@@ -306,11 +307,7 @@ describe("useFileContent", () => {
     const { result } = await openFile();
     act(() => result.current.setBody(CHANGED_BODY));
 
-    let switched = false;
-    act(() => {
-      switched = result.current.setMode("raw");
-    });
-    expect(switched).toBe(true);
+    act(() => result.current.setMode("raw"));
     expect(result.current.mode).toBe("raw");
     expect(result.current.documentText).toBe(`${FRONTMATTER}${CHANGED_BODY}`);
 
@@ -319,10 +316,7 @@ describe("useFileContent", () => {
     expect(result.current.documentText).toBe(sourceText);
 
     const { revision } = result.current;
-    act(() => {
-      switched = result.current.setMode("rich");
-    });
-    expect(switched).toBe(true);
+    act(() => result.current.setMode("rich"));
     expect(result.current.mode).toBe("rich");
     expect(result.current.buffer?.body).toBe("# From source\n");
     expect(result.current.documentText).toBe(sourceText);
@@ -330,25 +324,9 @@ describe("useFileContent", () => {
     expect(result.current.dirty).toBe(true);
   });
 
-  it("continues in source with the same text once the visual editor is abandoned", async () => {
-    const { result } = await openFile();
-    act(() => result.current.setBody(CHANGED_BODY));
-
-    act(() => result.current.abandonRich());
-
-    expect(result.current.mode).toBe("raw");
-    expect(result.current.documentText).toBe(`${FRONTMATTER}${CHANGED_BODY}`);
-    let switched = true;
-    act(() => {
-      switched = result.current.setMode("rich");
-    });
-    expect(switched).toBe(true);
-    expect(result.current.mode).toBe("rich");
-  });
-
   it("drops the previous file state as soon as selection changes", async () => {
     const { result, rerender } = renderHook(
-      ({ fileId }) => useFileContent(fileId),
+      ({ fileId }) => useFileContent(fileId, null),
       { initialProps: { fileId: 7 } }
     );
 
@@ -375,7 +353,7 @@ describe("useFileContent", () => {
       fileId === 7 ? firstRead.promise : secondRead.promise
     );
     const { result, rerender } = renderHook(
-      ({ fileId }) => useFileContent(fileId),
+      ({ fileId }) => useFileContent(fileId, null),
       { initialProps: { fileId: 7 } }
     );
     await waitFor(() => expect(mocks.readFile).toHaveBeenCalledWith(7));

@@ -1,43 +1,26 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { ChatWorkspace } from "@ctrl-ui/react/chat-workspace";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgentPanel } from "./agent-panel";
-import type { UseAgentSession } from "./use-agent-session";
+import {
+  composer,
+  DOCUMENT,
+  FILE,
+  PROPOSAL,
+  renderPanel,
+  SCREENSHOT,
+} from "./agent-panel.fixtures";
 
-const DOCUMENT = "# Rules\n\nKeep it short.";
-const PROPOSAL = `${DOCUMENT}\n\nAnd kind.`;
-
-function renderPanel(overrides: Partial<UseAgentSession> = {}) {
-  const session: UseAgentSession = {
-    available: true,
-    messages: [],
-    activity: null,
-    running: false,
-    error: null,
-    proposal: null,
-    send: vi.fn().mockResolvedValue(undefined),
-    cancel: vi.fn().mockResolvedValue(undefined),
-    dismissProposal: vi.fn(),
-    ...overrides,
-  };
-  const onApply = vi.fn();
-  const onClose = vi.fn();
-  render(
-    <AgentPanel
-      documentText={DOCUMENT}
-      onApply={onApply}
-      onClose={onClose}
-      session={session}
-    />
-  );
-  return { session, onApply, onClose };
-}
-
-/** Lets a test type into the live editor below, as the user would after applying. */
 let typeInEditor: (text: string) => void = () => undefined;
 
-/** The editor's side of the loop: applying really replaces the open document. */
 function LiveEditor() {
   const [document, setDocument] = useState(DOCUMENT);
   const [proposal, setProposal] = useState<string | null>(PROPOSAL);
@@ -45,36 +28,102 @@ function LiveEditor() {
   return (
     <>
       <output data-testid="editor">{document}</output>
-      <AgentPanel
-        documentText={document}
-        onApply={setDocument}
-        onClose={vi.fn()}
-        session={{
-          available: true,
-          messages: [{ key: "you-1", role: "you", text: "be kind" }],
-          activity: null,
-          running: false,
-          error: null,
-          proposal,
-          send: vi.fn().mockResolvedValue(undefined),
-          cancel: vi.fn().mockResolvedValue(undefined),
-          dismissProposal: () => setProposal(null),
-        }}
-      />
+      <ChatWorkspace>
+        <AgentPanel
+          documentText={document}
+          file={FILE}
+          onApply={setDocument}
+          onClose={vi.fn()}
+          session={{
+            available: true,
+            conversations: [],
+            conversationId: null,
+            openConversation: vi.fn(),
+            newConversation: vi.fn(),
+            messages: [
+              { key: "you-1", role: "you", text: "be kind", images: [] },
+            ],
+            running: false,
+            error: null,
+            proposal,
+            references: [],
+            addReference: vi.fn(),
+            removeReference: vi.fn(),
+            includesFile: true,
+            includeFile: vi.fn(),
+            send: vi.fn().mockResolvedValue(undefined),
+            cancel: vi.fn().mockResolvedValue(undefined),
+            dismissProposal: () => setProposal(null),
+            draft: "",
+            setDraft: vi.fn(),
+            prefill: vi.fn(),
+          }}
+        />
+      </ChatWorkspace>
     </>
   );
 }
 
-const composer = () => screen.getByRole<HTMLTextAreaElement>("textbox");
+afterEach(() => {
+  window.localStorage.clear();
+});
 
 describe("AgentPanel", () => {
-  it("sends the request with the open document on Enter", () => {
+  it("sends the request with the open document on Enter", async () => {
     const { session } = renderPanel();
 
     fireEvent.change(composer(), { target: { value: "tighten it" } });
     fireEvent.keyDown(composer(), { key: "Enter" });
 
-    expect(session.send).toHaveBeenCalledWith("tighten it", DOCUMENT);
+    await waitFor(() =>
+      expect(session.send).toHaveBeenCalledWith(
+        { prompt: "tighten it", images: [] },
+        DOCUMENT,
+        {
+          model: "opus",
+          effort: "high",
+        }
+      )
+    );
+  });
+
+  it("runs with the model and thinking level picked last time, ignoring unknown ones", async () => {
+    window.localStorage.setItem("another-dev-tool.agent-model", "haiku");
+    window.localStorage.setItem("another-dev-tool.agent-effort", "ludicrous");
+    const { session } = renderPanel();
+
+    fireEvent.change(composer(), { target: { value: "tighten it" } });
+    fireEvent.keyDown(composer(), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(session.send).toHaveBeenCalledWith(
+        { prompt: "tighten it", images: [] },
+        DOCUMENT,
+        {
+          model: "haiku",
+          effort: "high",
+        }
+      )
+    );
+  });
+
+  it("names the open skill as the composer's context", () => {
+    renderPanel();
+
+    expect(screen.getByText("ux-rules")).toBeTruthy();
+  });
+
+  it("picks the model and thinking level from one dropdown", () => {
+    window.localStorage.setItem("another-dev-tool.agent-model", "haiku");
+    renderPanel();
+
+    const trigger = screen.getByRole("button", {
+      name: "Model: Haiku, Thinking: High",
+    });
+    expect(
+      trigger.querySelector('[data-control-ui="provider-logo"] path')
+    ).toBeTruthy();
+    expect(screen.queryAllByRole("combobox")).toHaveLength(0);
   });
 
   it("keeps Shift+Enter for a new line", () => {
@@ -97,6 +146,13 @@ describe("AgentPanel", () => {
     expect(session.send).not.toHaveBeenCalled();
   });
 
+  it("shows a change prefilled for the file in the composer, unsent", () => {
+    const { session } = renderPanel({ draft: "Apply this change." });
+
+    expect(composer().value).toBe("Apply this change.");
+    expect(session.send).not.toHaveBeenCalled();
+  });
+
   it("has no composer when the agent CLI is missing", () => {
     renderPanel({ available: false });
 
@@ -106,7 +162,9 @@ describe("AgentPanel", () => {
   it("lets a running request be stopped", () => {
     const { session } = renderPanel({
       running: true,
-      messages: [{ key: "you-1", role: "you", text: "tighten it" }],
+      messages: [
+        { key: "you-1", role: "you", text: "tighten it", images: [SCREENSHOT] },
+      ],
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
@@ -170,7 +228,9 @@ describe("AgentPanel", () => {
   it("shows a failure and sends the same request again on retry", () => {
     const { session } = renderPanel({
       error: "The agent exited early.",
-      messages: [{ key: "you-1", role: "you", text: "tighten it" }],
+      messages: [
+        { key: "you-1", role: "you", text: "tighten it", images: [SCREENSHOT] },
+      ],
     });
 
     expect(screen.getByRole("alert").textContent).toContain(
@@ -178,6 +238,25 @@ describe("AgentPanel", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(session.send).toHaveBeenCalledWith("tighten it", DOCUMENT);
+    expect(session.send).toHaveBeenCalledWith(
+      { prompt: "tighten it", images: [SCREENSHOT] },
+      DOCUMENT,
+      {
+        model: "opus",
+        effort: "high",
+      }
+    );
+  });
+
+  it("opens the folded conversation once a request goes out", async () => {
+    const { session } = renderPanel({}, { expanded: false });
+    const toggle = screen.getByRole("button", { name: "Conversation" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.change(composer(), { target: { value: "tighten it" } });
+    fireEvent.keyDown(composer(), { key: "Enter" });
+
+    await waitFor(() => expect(session.send).toHaveBeenCalled());
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
   });
 });

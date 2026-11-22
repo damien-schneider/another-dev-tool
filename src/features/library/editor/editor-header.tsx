@@ -20,7 +20,7 @@ import { Toggle, ToggleGroup } from "@ctrl-ui/react/ui/toggle";
 import { Heading, Text } from "@ctrl-ui/react/ui/typography";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Ellipsis, Sparkles } from "lucide-react";
+import { Ellipsis, History, Sparkles } from "lucide-react";
 import { displayPath } from "@/features/destinations/destination-path";
 import { targetLabel } from "@/lib/agent-files/scan-targets";
 import { useHomeDirectory } from "@/lib/home-dir";
@@ -48,6 +48,13 @@ function SaveControls({
           Saving…
         </Text>
       </div>
+    );
+  }
+  if (editor.readOnly) {
+    return (
+      <Text role="status" size="caption" tone="muted">
+        Read-only
+      </Text>
     );
   }
   if (!editor.dirty) {
@@ -84,11 +91,8 @@ function ModeToggle({ editor }: { editor: UseFileContent }) {
         const next = EDITOR_MODES.find(
           (mode) => mode !== editor.mode && pressed.includes(mode)
         );
-        if (next && !editor.setMode(next)) {
-          toast.info("This file stays in source", {
-            description:
-              "The visual editor could not show it without changing its formatting.",
-          });
+        if (next) {
+          editor.setMode(next);
         }
       }}
       value={[editor.mode]}
@@ -212,24 +216,26 @@ function MoreMenu({
   );
 }
 
+export type SidePanel = "agent" | "history";
+
 export function EditorHeader({
-  agentOpen,
   editor,
   favorite,
   file,
   onReview,
-  onToggleAgent,
   onToggleFavorite,
+  onToggleSidePanel,
   onTrash,
+  sidePanel,
 }: {
-  agentOpen: boolean;
   editor: UseFileContent;
   favorite: boolean;
   file: FileRow;
   onReview: () => void;
-  onToggleAgent: () => void;
   onToggleFavorite: (path: string) => Promise<void>;
+  onToggleSidePanel: (panel: SidePanel) => void;
   onTrash: () => void;
+  sidePanel: SidePanel | null;
 }) {
   const home = useHomeDirectory();
   return (
@@ -238,7 +244,7 @@ export function EditorHeader({
       data-tauri-drag-region="deep"
     >
       <FileKindIcon
-        className="size-4 shrink-0 text-muted-foreground"
+        className="text-muted-foreground size-4 shrink-0"
         kind={file.kind}
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -258,10 +264,18 @@ export function EditorHeader({
       <SaveControls editor={editor} onReview={onReview} />
       <ModeToggle editor={editor} />
       <IconButton
-        active={agentOpen}
-        aria-pressed={agentOpen}
+        active={sidePanel === "history"}
+        aria-pressed={sidePanel === "history"}
+        label="History"
+        onClick={() => onToggleSidePanel("history")}
+      >
+        <History />
+      </IconButton>
+      <IconButton
+        active={sidePanel === "agent"}
+        aria-pressed={sidePanel === "agent"}
         label="Ask AI"
-        onClick={onToggleAgent}
+        onClick={() => onToggleSidePanel("agent")}
       >
         <Sparkles />
       </IconButton>

@@ -186,7 +186,7 @@ function SyncPlan({
 
       <DialogBody>
         {applyError ? (
-          <Alert variant="destructive">
+          <Alert tone="danger">
             <CircleAlert />
             <AlertTitle>The sync was not applied</AlertTitle>
             <AlertDescription>{applyError}</AlertDescription>
@@ -212,7 +212,7 @@ function SyncPlan({
         ) : null}
 
         {state.status === "error" ? (
-          <Alert variant="destructive">
+          <Alert tone="danger">
             <CircleAlert />
             <AlertTitle>The preview could not be built</AlertTitle>
             <AlertDescription>{state.message}</AlertDescription>

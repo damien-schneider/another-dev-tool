@@ -256,7 +256,7 @@ function CreateGroupForm({ onCreated }: { onCreated: () => void }) {
         </div>
 
         {error ? (
-          <Alert variant="destructive">
+          <Alert tone="danger">
             <CircleAlert />
             <AlertTitle>The group was not created</AlertTitle>
             <AlertDescription>{error}</AlertDescription>

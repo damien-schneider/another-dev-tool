@@ -163,7 +163,7 @@ export function PromptComposer({
         </ChatComposerToolbar>
       </ChatComposerShell>
       {error ? (
-        <Text className="mt-2" role="alert" size="label" tone="destructive">
+        <Text className="mt-2" role="alert" size="label" tone="danger">
           {error}
         </Text>
       ) : null}

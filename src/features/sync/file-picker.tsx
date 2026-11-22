@@ -58,7 +58,7 @@ export function FilePicker({
 
   if (state.status === "error") {
     return (
-      <Alert variant="destructive">
+      <Alert tone="danger">
         <CircleAlert />
         <AlertTitle>The files could not be listed</AlertTitle>
         <AlertDescription>{state.message}</AlertDescription>
@@ -86,7 +86,7 @@ export function FilePicker({
     <>
       <InputGroup size="sm">
         <InputGroupAddon>
-          <Search aria-hidden="true" className="size-3.5" />
+          <Search aria-hidden="true" />
         </InputGroupAddon>
         <Input
           aria-label="Filter files"
@@ -146,7 +146,7 @@ function FileOption({ file, home }: { file: FileRow; home: string | null }) {
       <span className="flex min-w-0 flex-col">
         <span className="flex min-w-0 items-center gap-1.5">
           <FileKindIcon
-            className="size-3.5 shrink-0 text-muted-foreground"
+            className="text-muted-foreground size-3.5 shrink-0"
             kind={file.kind}
           />
           <Text className="truncate" tone="foreground" weight="medium">

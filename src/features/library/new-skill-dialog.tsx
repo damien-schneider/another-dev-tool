@@ -30,47 +30,56 @@ import { writeFrontmatterField } from "@/lib/frontmatter-fields";
 import { installFiles, toIpcError } from "@/lib/ipc";
 import type { FileRow, Root } from "@/lib/ipc-types";
 
-import { parentPath } from "./library-model";
+import { parentPath } from "./library-paths";
 import { SkillLocationField, useSkillLocations } from "./skill-location-field";
-import { skillFilePath } from "./skill-locations";
+import { projectSkillLocation, skillFilePath } from "./skill-locations";
 
 const DESCRIPTION_LIMIT = 1024;
 
+export interface SkillDraft {
+  name: string;
+  description: string;
+  body: string;
+}
+
 export interface NewSkillDialogProps {
   files: readonly FileRow[];
-  /** Receives the id of the new file once it is written. */
   onCreated: (fileId: number) => void;
   onOpenChange: (open: boolean) => void;
   open: boolean;
+  project: string | null;
   roots: readonly Root[];
   /** The open file: a new skill starts next to the skill being looked at. */
   selectedFile: FileRow | null;
+  draft?: SkillDraft | null;
 }
 
-function skillDocument(name: string, title: string, description: string) {
+function skillDocument(name: string, description: string, body: string) {
   const named = writeFrontmatterField(null, "name", name);
   const frontmatter = writeFrontmatterField(named, "description", description);
-  return `---\n${frontmatter}\n---\n\n# ${title}\n`;
+  return `---\n${frontmatter}\n---\n\n${body}`;
 }
 
 /** The dialog unmounts its content when it closes, so every new skill starts clean. */
 function NewSkillForm({
+  draft,
   files,
   onClose,
   onCreated,
+  project,
   roots,
   selectedFile,
 }: Pick<
   NewSkillDialogProps,
-  "files" | "onCreated" | "roots" | "selectedFile"
+  "draft" | "files" | "onCreated" | "project" | "roots" | "selectedFile"
 > & {
   onClose: () => void;
 }) {
   const nameId = useId();
   const descriptionId = useId();
   const { home, locations } = useSkillLocations(files, roots);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(draft?.name ?? "");
+  const [description, setDescription] = useState(draft?.description ?? "");
   const [picked, setPicked] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -80,7 +89,12 @@ function NewSkillForm({
     selectedFile?.kind === "skill"
       ? parentPath(parentPath(selectedFile.path))
       : null;
-  const location = picked ?? neighbour ?? locations[0]?.path ?? null;
+  const location =
+    picked ??
+    neighbour ??
+    (project === null ? null : projectSkillLocation(locations, project)) ??
+    locations[0]?.path ??
+    null;
   const name = slugifySkillName(title);
   const path =
     location === null || name === "" ? null : skillFilePath(location, name);
@@ -122,7 +136,11 @@ function NewSkillForm({
         [
           {
             path,
-            content: skillDocument(name, title.trim(), description.trim()),
+            content: skillDocument(
+              name,
+              description.trim(),
+              draft?.body ?? `# ${title.trim()}\n`
+            ),
           },
         ],
         false
@@ -206,7 +224,7 @@ function NewSkillForm({
           </Field>
         )}
         {failure === null ? null : (
-          <Alert variant="destructive">
+          <Alert tone="danger">
             <AlertTitle>The skill was not created</AlertTitle>
             <AlertDescription>{failure}</AlertDescription>
           </Alert>
@@ -229,20 +247,24 @@ function NewSkillForm({
 }
 
 export function NewSkillDialog({
+  draft,
   files,
   onCreated,
   onOpenChange,
   open,
   roots,
+  project,
   selectedFile,
 }: NewSkillDialogProps) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent>
         <NewSkillForm
+          draft={draft}
           files={files}
           onClose={() => onOpenChange(false)}
           onCreated={onCreated}
+          project={project}
           roots={roots}
           selectedFile={selectedFile}
         />

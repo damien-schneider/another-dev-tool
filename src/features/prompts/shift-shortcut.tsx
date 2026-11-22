@@ -29,7 +29,7 @@ export function ShiftShortcut({
           >
             <span
               className={cn(
-                "absolute inset-0 origin-bottom bg-primary transition-transform duration-150 ease-out motion-reduce:transition-none",
+                "bg-primary absolute inset-0 origin-bottom transition-transform duration-150 ease-out motion-reduce:transition-none",
                 completed ? "scale-y-100" : "scale-y-0"
               )}
             />

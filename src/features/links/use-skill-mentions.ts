@@ -1,14 +1,14 @@
-import type { Extensions } from "@tiptap/react";
+import type { Extension } from "@codemirror/state";
 import { useEffect, useMemo } from "react";
 
 import type { FileRow } from "@/lib/ipc-types";
 
-import { createMentionStore, SkillMention } from "./skill-mention";
+import { createMentionStore, skillMention } from "./skill-mention";
 import type { HoveredMention, MentionPopupProps } from "./use-mention-hover";
 import { useMentionHover } from "./use-mention-hover";
 
 export interface SkillMentions {
-  extensions: Extensions;
+  extensions: Extension;
   hovered: HoveredMention | null;
   close: () => void;
   openFile: (file: FileRow) => void;
@@ -38,7 +38,7 @@ export function useSkillMentions({
   const hover = useMentionHover({ targets: byName, onOpen });
 
   const extensions = useMemo(
-    () => [SkillMention.configure({ store, domEvents: hover.domEvents })],
+    () => skillMention(store, hover.domEvents),
     [store, hover.domEvents]
   );
 

@@ -1,17 +1,32 @@
 import { invoke } from "@tauri-apps/api/core";
-
 import type {
+  AgentConversationSummary,
+  AgentPromptImage,
+  AgentRunSettings,
+  AgentStarted,
   AgentStatus,
+  AgentStoredMessage,
+} from "./agent-ipc-types";
+import type {
+  ExplainLevel,
+  ExplainRecentProject,
+  ExplainStoredMessage,
+  SourceFile,
+} from "./explain-ipc-types";
+import type {
   AppErrorCode,
   AppErrorPayload,
   ApplyResult,
   Backup,
   CaptureAccessStatus,
+  CommitChange,
   DestinationFolder,
   DiffResult,
   DuplicateGroup,
   FavoriteProject,
+  FileCommit,
   FileContent,
+  FileHistory,
   FileLinks,
   FileRow,
   InstallResult,
@@ -25,6 +40,7 @@ import type {
   WatcherStatus,
   WriteResult,
 } from "./ipc-types";
+import type { PatternsState } from "./patterns-ipc-types";
 
 export class IpcError extends Error {
   readonly code: AppErrorCode;
@@ -138,14 +154,94 @@ export const trashFile = (fileId: number) =>
 export const listFileLinks = (fileId: number) =>
   call<FileLinks>("list_file_links", { fileId });
 
+export const fileHistory = (fileId: number) =>
+  call<FileHistory>("file_history", { fileId });
+
+export const fileCommitChange = (
+  fileId: number,
+  commit: Pick<FileCommit, "hash" | "path" | "previousPath">
+) =>
+  call<CommitChange>("file_commit_change", {
+    fileId,
+    hash: commit.hash,
+    path: commit.path,
+    previousPath: commit.previousPath,
+  });
+
+export const fileWorkingChange = (fileId: number) =>
+  call<CommitChange>("file_working_change", { fileId });
+
 export const agentStatus = () => call<AgentStatus>("agent_status");
 
-export const agentSend = (fileId: number, content: string, prompt: string) =>
-  call<number>("agent_send", { fileId, content, prompt });
+export const agentSend = (request: {
+  fileId: number;
+  conversationId: string | null;
+  content: string | null;
+  prompt: string;
+  images: AgentPromptImage[];
+  references: string[];
+  settings: AgentRunSettings;
+}) =>
+  call<AgentStarted>("agent_send", {
+    fileId: request.fileId,
+    conversationId: request.conversationId,
+    content: request.content,
+    prompt: {
+      text: request.prompt,
+      images: request.images.map(
+        ({ name, mediaType, width, height, base64 }) => ({
+          name,
+          mediaType,
+          width,
+          height,
+          base64,
+        })
+      ),
+      references: request.references,
+    },
+    settings: request.settings,
+  });
+
+export const agentConversations = (fileId: number) =>
+  call<AgentConversationSummary[]>("agent_conversations", { fileId });
+
+export const agentConversation = (fileId: number, conversationId: string) =>
+  call<AgentStoredMessage[]>("agent_conversation", { fileId, conversationId });
 
 export const agentCancel = () => call<null>("agent_cancel");
 
+export const explainSend = (request: {
+  project: string;
+  conversationId: string | null;
+  text: string;
+  level: ExplainLevel;
+  settings: AgentRunSettings;
+}) => call<AgentStarted>("explain_send", request);
+
+export const explainCancel = () => call<null>("explain_cancel");
+
+export const explainConversations = (project: string) =>
+  call<AgentConversationSummary[]>("explain_conversations", { project });
+
+export const explainConversation = (conversationId: string) =>
+  call<ExplainStoredMessage[]>("explain_conversation", { conversationId });
+
+export const explainRecentProjects = () =>
+  call<ExplainRecentProject[]>("explain_recent_projects");
+
+export const explainReadSource = (project: string, path: string) =>
+  call<SourceFile>("explain_read_source", { project, path });
+
 export const listDuplicates = () => call<DuplicateGroup[]>("list_duplicates");
+
+export const patternsState = () => call<PatternsState>("patterns_state");
+
+export const patternsAnalyze = () => call<null>("patterns_analyze");
+
+export const patternsCancel = () => call<null>("patterns_cancel");
+
+export const patternsDismiss = (id: number) =>
+  call<null>("patterns_dismiss", { id });
 
 export const getWatcherStatus = () => call<WatcherStatus>("get_watcher_status");
 

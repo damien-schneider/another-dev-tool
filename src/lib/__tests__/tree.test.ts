@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { FileRow, Root } from "../ipc-types";
-import { buildTree, fileIdOf, fileNodeId, TREE_ROOT_ID } from "../tree";
+import {
+  buildTree,
+  fileIdOf,
+  fileNodeId,
+  folderIdsOf,
+  TREE_ROOT_ID,
+} from "../tree";
 
 const root: Root = {
   id: 1,
@@ -21,6 +27,7 @@ function file(id: number, relPath: string, rootId = 1): FileRow {
     description: null,
     aliases: [],
     projectDir: null,
+    repositoryDir: null,
     size: 1,
     mtimeNs: 1,
     hash: `h${id}`,
@@ -96,6 +103,16 @@ describe("buildTree", () => {
     const index = buildTree([], [root]);
 
     expect(Object.keys(index)).toEqual([TREE_ROOT_ID]);
+  });
+});
+
+describe("folderIdsOf", () => {
+  it("lists every branch that has to open to reach a file, root first", () => {
+    const nested = file(1, "app/api/CLAUDE.md");
+    const index = buildTree([nested], [root]);
+
+    const names = folderIdsOf(nested).map((id) => index[id]?.name);
+    expect(names).toEqual(["GitHub", "app", "api"]);
   });
 });
 

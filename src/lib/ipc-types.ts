@@ -1,6 +1,6 @@
-export type { FileKind } from "@/lib/agent-files/scan-targets";
-
 import type { FileKind } from "@/lib/agent-files/scan-targets";
+
+export type { FileKind } from "@/lib/agent-files/scan-targets";
 
 /** Mirrors src-tauri/src/error.rs */
 export type AppErrorCode =
@@ -12,6 +12,7 @@ export type AppErrorCode =
   | "scan_busy"
   | "agent_busy"
   | "agent_missing"
+  | "analysis_busy"
   | "io"
   | "db"
   | "internal";
@@ -62,39 +63,6 @@ export interface PromptHistoryEntry {
   attachments: PromptAttachment[];
 }
 
-/** Mirrors agent::cli::AgentStatus */
-export interface AgentStatus {
-  available: boolean;
-  path: string | null;
-  version: string | null;
-}
-
-/** Mirrors events::AgentDelta */
-export interface AgentDeltaEvent {
-  runId: number;
-  block: number;
-  text: string;
-}
-
-/** Mirrors events::AgentTool */
-export interface AgentToolEvent {
-  runId: number;
-  name: string;
-}
-
-/** Mirrors events::AgentDone */
-export interface AgentDoneEvent {
-  runId: number;
-  proposal: string | null;
-  cancelled: boolean;
-}
-
-/** Mirrors events::AgentError */
-export interface AgentErrorEvent {
-  runId: number;
-  message: string;
-}
-
 export interface CaptureAccessStatus {
   supported: boolean;
   granted: boolean;
@@ -118,6 +86,8 @@ export interface FileRow {
   /** The name other files reference this one by; null for CLAUDE.md-style files */
   name: string | null;
   projectDir: string | null;
+  /** The repository `projectDir` checks out when it is a linked git worktree */
+  repositoryDir: string | null;
   size: number;
   mtimeNs: number;
   hash: string;
@@ -144,6 +114,12 @@ export interface DuplicateGroup {
   files: FileRow[];
 }
 
+/** Mirrors managed_by::ManagedBy */
+export type ManagedBy =
+  | { tool: "npxSkills"; source: string }
+  | { tool: "claude" }
+  | { tool: "codex" };
+
 /** Mirrors commands::files::FileContent */
 export interface FileContent {
   fileId: number;
@@ -153,6 +129,39 @@ export interface FileContent {
   mtimeMs: number;
   isSymlink: boolean;
   symlinkTarget: string | null;
+  managedBy: ManagedBy | null;
+}
+
+/** Mirrors git::history::FileCommit */
+export interface FileCommit {
+  hash: string;
+  shortHash: string;
+  author: string;
+  timeMs: number;
+  subject: string;
+  /** Where the file sits after this commit; `null` when the commit deletes it. */
+  path: string | null;
+  /** Where the file sat before this commit; `null` when the commit adds it. */
+  previousPath: string | null;
+}
+
+/** Mirrors git::CommitChange; a missing side is empty. */
+export interface CommitChange {
+  before: string;
+  after: string;
+}
+
+/** Mirrors git::working::WorkingState */
+export type WorkingState =
+  | { state: "clean" }
+  | { state: "modified" }
+  | { state: "untracked" }
+  | { state: "ignored"; source: string; line: number; pattern: string };
+
+/** Mirrors git::history::FileHistory */
+export interface FileHistory {
+  commits: FileCommit[];
+  working: WorkingState;
 }
 
 /** Mirrors commands::files::WriteResult */

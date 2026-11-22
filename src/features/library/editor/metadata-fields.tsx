@@ -24,7 +24,7 @@ import {
 } from "@/lib/frontmatter-fields";
 import type { FileKind, FileRow } from "@/lib/ipc-types";
 
-import { parentPath, pathName } from "../library-model";
+import { parentPath, pathName } from "../library-paths";
 
 /** Agents read at most this much of a skill's description. */
 const DESCRIPTION_LIMIT = 1024;
@@ -72,10 +72,12 @@ function NameField({
   file,
   name,
   onChange,
+  readOnly,
 }: {
   file: FileRow;
   name: string;
   onChange: (value: string) => void;
+  readOnly: boolean;
 }) {
   const id = useId();
   const problem = nameProblem(file.kind, name);
@@ -91,11 +93,12 @@ function NameField({
         autoCorrect="off"
         id={id}
         onChange={(event) => onChange(event.target.value)}
+        readOnly={readOnly}
         spellCheck={false}
         value={name}
       />
       <FieldError match>{problem}</FieldError>
-      {differsFromFolder ? (
+      {differsFromFolder && !readOnly ? (
         <FieldDescription>
           Agents expect a skill to be named after its folder.{" "}
           <Button onClick={() => onChange(folder)} size="xs" variant="link">
@@ -111,10 +114,12 @@ function DescriptionField({
   description,
   kind,
   onChange,
+  readOnly,
 }: {
   description: string;
   kind: FileKind;
   onChange: (value: string) => void;
+  readOnly: boolean;
 }) {
   const id = useId();
   const problem = descriptionProblem(kind, description);
@@ -129,9 +134,7 @@ function DescriptionField({
           <Text
             numeric
             size="caption"
-            tone={
-              description.length > DESCRIPTION_LIMIT ? "destructive" : "muted"
-            }
+            tone={description.length > DESCRIPTION_LIMIT ? "danger" : "muted"}
           >
             {description.length} / {DESCRIPTION_LIMIT}
           </Text>
@@ -150,6 +153,7 @@ function DescriptionField({
           }
         }}
         placeholder="What this does, and when an agent should reach for it."
+        readOnly={readOnly}
         rows={2}
         value={description}
       />
@@ -167,11 +171,13 @@ export function MetadataFields({
   frontmatter,
   onChange,
   onEditSource,
+  readOnly,
 }: {
   file: FileRow;
   frontmatter: string | null;
   onChange: (key: FrontmatterKey, value: string) => void;
   onEditSource: () => void;
+  readOnly: boolean;
 }) {
   const fields = useMemo(
     () => readFrontmatterFields(frontmatter),
@@ -184,7 +190,7 @@ export function MetadataFields({
 
   if (fields.problem !== null) {
     return (
-      <Alert variant="destructive">
+      <Alert tone="danger">
         <AlertTitle>The frontmatter is not valid YAML</AlertTitle>
         <AlertDescription>
           {fields.problem}. Agents may skip this file until it is fixed.
@@ -205,12 +211,14 @@ export function MetadataFields({
           file={file}
           name={fields.name}
           onChange={(value) => onChange("name", value)}
+          readOnly={readOnly}
         />
       ) : null}
       <DescriptionField
         description={fields.description}
         kind={file.kind}
         onChange={(value) => onChange("description", value)}
+        readOnly={readOnly}
       />
       {fields.otherKeys.length > 0 ? (
         <Text size="caption" tone="muted">

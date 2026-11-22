@@ -43,7 +43,7 @@ export function UpdateButton({
       </SidebarMenuButton>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute end-1 top-1 size-1.5 rounded-full bg-primary"
+        className="bg-primary pointer-events-none absolute end-1 top-1 size-1.5 rounded-full"
       />
       <AlertDialog
         onOpenChange={(open) => {

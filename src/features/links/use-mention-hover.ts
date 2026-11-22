@@ -1,9 +1,9 @@
-import type { EditorView } from "@tiptap/pm/view";
+import { EditorView } from "@codemirror/view";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FileRow } from "@/lib/ipc-types";
 
-import { MENTION_ATTRIBUTE } from "./skill-mention";
+import { MENTION_ATTRIBUTE, type MentionDomEvents } from "./skill-mention";
 
 const OPEN_DELAY = 350;
 const CLOSE_DELAY = 150;
@@ -18,10 +18,7 @@ export interface HoveredMention {
   anchor: Element;
 }
 
-/**
- * Mentions are ProseMirror decorations, not React nodes, so the editor plugin owns
- * their pointer events and this hook only keeps the resulting card state.
- */
+/** Mentions are editor decorations, not React nodes: the editor hands their pointer events to `domEvents`. */
 export function useMentionHover({
   targets,
   onOpen,
@@ -70,26 +67,25 @@ export function useMentionHover({
     []
   );
 
-  const domEvents = useMemo(
+  const domEvents = useMemo<MentionDomEvents>(
     () => ({
-      pointerover: (_view: EditorView, event: Event) => {
+      pointerover: (event) => {
         const mention = mentionAt(event.target);
         if (mention && mention.anchor !== latest.current.hovered?.anchor) {
           schedule(mention, OPEN_DELAY);
         }
         return false;
       },
-      pointerout: (_view: EditorView, event: Event) => {
+      pointerout: (event) => {
         if (mentionAt(event.target)) {
           schedule(null, CLOSE_DELAY);
         }
         return false;
       },
-      click: (view: EditorView, event: Event) => {
-        const modified =
-          event instanceof MouseEvent && (event.metaKey || event.ctrlKey);
-        const mention =
-          view.editable && !modified ? null : mentionAt(event.target);
+      click: (event, view) => {
+        const modified = event.metaKey || event.ctrlKey;
+        const editable = view.state.facet(EditorView.editable);
+        const mention = editable && !modified ? null : mentionAt(event.target);
         if (!mention) {
           return false;
         }

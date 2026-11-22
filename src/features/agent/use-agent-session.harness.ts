@@ -1,0 +1,126 @@
+import { vi } from "vitest";
+
+import type {
+  AgentDeltaEvent,
+  AgentDoneEvent,
+  AgentPart,
+  AgentPartEvent,
+  AgentStoredMessage,
+} from "@/lib/agent-ipc-types";
+
+import { answerText } from "./agent-steps";
+import type { AgentMessage } from "./use-agent-session";
+
+export const mocks = {
+  agentSend: vi.fn(),
+  agentCancel: vi.fn(),
+  agentStatus: vi.fn(),
+  agentConversations: vi.fn(),
+  agentConversation: vi.fn(),
+  handlers: {
+    delta: [] as ((payload: AgentDeltaEvent) => void)[],
+    part: [] as ((payload: AgentPartEvent) => void)[],
+    done: [] as ((payload: AgentDoneEvent) => void)[],
+  },
+};
+
+const listen =
+  <T>(handlers: ((payload: T) => void)[]) =>
+  (handler: (payload: T) => void) => {
+    handlers.push(handler);
+    return Promise.resolve(() => undefined);
+  };
+
+export const eventsModule = {
+  onAgentDelta: listen(mocks.handlers.delta),
+  onAgentPart: listen(mocks.handlers.part),
+  onAgentDone: listen(mocks.handlers.done),
+  onAgentError: () => Promise.resolve(() => undefined),
+};
+
+export const ipcModule = {
+  agentSend: mocks.agentSend,
+  agentCancel: mocks.agentCancel,
+  agentStatus: mocks.agentStatus,
+  agentConversations: mocks.agentConversations,
+  agentConversation: mocks.agentConversation,
+  toIpcError: (cause: unknown) =>
+    cause instanceof Error ? cause : new Error(String(cause)),
+};
+
+export const SETTINGS = { model: "opus", effort: "high" } as const;
+
+const fire =
+  <T>(handlers: ((payload: T) => void)[]) =>
+  (payload: T) => {
+    for (const handler of handlers) {
+      handler(payload);
+    }
+  };
+export const emitDelta = fire(mocks.handlers.delta);
+export const emitDone = fire(mocks.handlers.done);
+export const emitPart = (index: number, part: AgentPart, runId = 7) =>
+  fire(mocks.handlers.part)({ runId, index, part });
+
+export const TEXT: AgentPart = { kind: "text", text: "" };
+export const THINKING: AgentPart = {
+  kind: "thinking",
+  text: "",
+  durationMs: null,
+};
+export const READ: AgentPart = {
+  kind: "tool",
+  id: "read",
+  name: "Read",
+  input: null,
+  state: "running",
+  output: null,
+  durationMs: null,
+};
+
+export const said = (
+  id: number,
+  role: "you" | "agent",
+  text: string
+): AgentStoredMessage => ({
+  id,
+  role,
+  text,
+  images: [],
+  parts: [],
+  meta: null,
+});
+
+const HISTORY: Record<string, AgentStoredMessage[]> = {
+  latest: [said(1, "you", "tighten it"), said(2, "agent", "Tightened.")],
+  earlier: [said(3, "you", "add a title"), said(4, "agent", "Added.")],
+};
+
+export const texts = (messages: AgentMessage[]) =>
+  messages.map((message) =>
+    message.role === "you" ? message.text : answerText(message.parts)
+  );
+
+export const kinds = (messages: AgentMessage[]) => {
+  const last = messages.at(-1);
+  return last?.role === "agent" ? last.parts.map((part) => part.kind) : [];
+};
+
+export function resetMocks() {
+  for (const handlers of Object.values(mocks.handlers)) {
+    handlers.length = 0;
+  }
+  mocks.agentSend
+    .mockReset()
+    .mockResolvedValue({ runId: 7, conversationId: "started" });
+  mocks.agentCancel.mockReset().mockResolvedValue(null);
+  mocks.agentStatus
+    .mockReset()
+    .mockResolvedValue({ available: true, path: "/bin/claude", version: "1" });
+  mocks.agentConversations.mockReset().mockResolvedValue([]);
+  mocks.agentConversation
+    .mockReset()
+    .mockImplementation((_fileId: number, id: string) =>
+      Promise.resolve(HISTORY[id] ?? [])
+    );
+}

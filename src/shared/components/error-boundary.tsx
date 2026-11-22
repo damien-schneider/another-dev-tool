@@ -23,13 +23,13 @@ export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
   ErrorBoundaryState
 > {
-  state: ErrorBoundaryState = { failed: false };
+  override state: ErrorBoundaryState = { failed: false };
 
   static getDerivedStateFromError(): ErrorBoundaryState {
     return { failed: true };
   }
 
-  componentDidCatch(error: Error) {
+  override componentDidCatch(error: Error) {
     logError(`${this.props.label} failed: ${error.message}`).catch(() => {
       // Outside the desktop shell there is no log to write to.
     });
@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<
     this.setState({ failed: false });
   };
 
-  render() {
+  override render() {
     return this.state.failed
       ? this.props.fallback(this.retry)
       : this.props.children;

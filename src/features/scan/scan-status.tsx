@@ -54,7 +54,7 @@ export function ScanStatus({ scan }: { scan: UseScan }) {
       <div className="flex min-w-0 items-center gap-2">
         {scan.running ? <Spinner label="Scanning" /> : null}
         {failed ? (
-          <Text as="p" role="alert" tone="destructive">
+          <Text as="p" role="alert" tone="danger">
             {scan.error}
           </Text>
         ) : (

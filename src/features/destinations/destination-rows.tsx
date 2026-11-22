@@ -1,16 +1,51 @@
 import { cn } from "@ctrl-ui/react/lib/cn";
 import { Badge } from "@ctrl-ui/react/ui/badge";
 import { CommandItem } from "@ctrl-ui/react/ui/command";
+import { Kbd } from "@ctrl-ui/react/ui/kbd";
 import { Reveal, RevealScope } from "@ctrl-ui/react/ui/reveal";
 import { Text } from "@ctrl-ui/react/ui/typography";
 import { Check, Folder, Star } from "lucide-react";
-import type { MouseEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 
 import type { DestinationFolder } from "@/lib/ipc-types";
 import { IconButton } from "@/shared/components/icon-button";
 import { destinationParts } from "./destination-path";
 
 const STAR_SHOWN_STYLE = { "--cui-reveal-hidden-opacity": "1" } as const;
+const STAR_SHORTCUT_KEY = "d";
+const STAR_SHORTCUT_LABEL = navigator.platform.includes("Mac")
+  ? "⌘D"
+  : "Ctrl+D";
+
+/** The star sits inside an option, out of the tab order: the keyboard reaches it through the highlighted row. */
+export function isStarShortcut(event: KeyboardEvent): boolean {
+  return (
+    (event.metaKey || event.ctrlKey) &&
+    event.key.toLowerCase() === STAR_SHORTCUT_KEY
+  );
+}
+
+export function StarShortcutHint() {
+  return (
+    <Text
+      as="span"
+      className="me-2 flex items-center gap-1.5"
+      size="caption"
+      tone="muted"
+    >
+      <Kbd>{STAR_SHORTCUT_LABEL}</Kbd>
+      Star
+    </Text>
+  );
+}
+
+export function PickerNote({ children }: { children: ReactNode }) {
+  return (
+    <Text as="p" className="mx-2 my-1.5" size="label" tone="muted">
+      {children}
+    </Text>
+  );
+}
 
 export function PickerRow({
   children,
@@ -38,13 +73,19 @@ export function FolderRow({
   onSelect,
   onToggleFavorite,
   selected,
+  selectedLabel,
 }: {
-  folder: DestinationFolder;
+  folder: Pick<
+    DestinationFolder,
+    "available" | "favorite" | "fileCount" | "path"
+  >;
   highlighted: boolean;
   home: string | null;
   onSelect: (path: string) => void;
   onToggleFavorite: (path: string) => Promise<void>;
   selected: boolean;
+  /** Read out on the selected row, e.g. "Current destination". */
+  selectedLabel: string;
 }) {
   const { name, parent } = destinationParts(folder.path, home);
   // Kept quiet on a long list, but always offered on the folder in hand —
@@ -69,7 +110,7 @@ export function FolderRow({
       >
         <Folder
           aria-hidden="true"
-          className="size-4 shrink-0 text-muted-foreground"
+          className="text-muted-foreground size-4 shrink-0"
         />
         <span className="max-w-56 shrink-0 truncate">{name}</span>
         <Text
@@ -115,7 +156,7 @@ export function FolderRow({
           aria-hidden="true"
           className={cn("size-4 shrink-0", !selected && "invisible")}
         />
-        {selected ? <span className="sr-only">Current destination</span> : null}
+        {selected ? <span className="sr-only">{selectedLabel}</span> : null}
       </RevealScope>
     </CommandItem>
   );

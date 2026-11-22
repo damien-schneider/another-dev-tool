@@ -219,7 +219,7 @@ export function TrashDialog({
         </AlertDialogHeader>
         {error ? (
           <AlertDialogBody>
-            <Alert variant="destructive">
+            <Alert tone="danger">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           </AlertDialogBody>

@@ -10,18 +10,30 @@ import {
   CommandList,
   CommandShortcut,
 } from "@ctrl-ui/react/ui/command";
-import { type LucideIcon, Plus, RefreshCw, Settings } from "lucide-react";
+import {
+  Folder,
+  Folders,
+  type LucideIcon,
+  Plus,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { PRIMARY_VIEWS, type ViewId } from "@/app-views";
 import { displayPath } from "@/features/destinations/destination-path";
 import { FileKindIcon } from "@/features/library/file-kind";
-import { fileTitle, filterFiles } from "@/features/library/library-model";
+import {
+  fileTitle,
+  filterFiles,
+  type LibraryScope,
+} from "@/features/library/library-model";
 import { useHomeDirectory } from "@/lib/home-dir";
 import type { FileRow } from "@/lib/ipc-types";
 
 /** Enough to fill the list several times over; past that the query needs narrowing, not scrolling. */
 const MAX_FILE_RESULTS = 40;
+const MAX_PROJECT_RESULTS = 5;
 
 interface PaletteAction {
   id: string;
@@ -58,6 +70,9 @@ export function CommandPalette({
   onSelectView,
   onNewSkill,
   onRescan,
+  project,
+  projects,
+  onOpenProject,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -66,15 +81,28 @@ export function CommandPalette({
   onSelectView: (view: ViewId) => void;
   onNewSkill: () => void;
   onRescan: () => void;
+  project: string | null;
+  projects: readonly Pick<LibraryScope, "label" | "path">[];
+  onOpenProject: (path: string | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const home = useHomeDirectory();
-  const searching = query.trim().length > 0;
+  const needle = query.trim().toLowerCase();
+  const searching = needle.length > 0;
 
   const matches = useMemo(
     () => (searching ? rankFiles(files, query) : []),
     [files, query, searching]
   );
+  const projectMatches = searching
+    ? projects
+        .filter(
+          (candidate) =>
+            candidate.path !== project &&
+            candidate.label.toLowerCase().includes(needle)
+        )
+        .slice(0, MAX_PROJECT_RESULTS)
+    : [];
 
   const actions: PaletteAction[] = [
     {
@@ -84,6 +112,16 @@ export function CommandPalette({
       shortcut: "⌘N",
       run: onNewSkill,
     },
+    ...(project === null
+      ? []
+      : [
+          {
+            id: "all-projects",
+            label: "Show all projects",
+            icon: Folders,
+            run: () => onOpenProject(null),
+          },
+        ]),
     ...PRIMARY_VIEWS.map(({ id, label, icon }) => ({
       id: `view-${id}`,
       label: `Go to ${label}`,
@@ -98,7 +136,6 @@ export function CommandPalette({
     },
     { id: "rescan", label: "Rescan folders", icon: RefreshCw, run: onRescan },
   ];
-  const needle = query.trim().toLowerCase();
   const visibleActions = actions.filter((action) =>
     action.label.toLowerCase().includes(needle)
   );
@@ -112,7 +149,7 @@ export function CommandPalette({
   return (
     <CommandDialog
       commandProps={{ shouldFilter: false }}
-      description="Search skills, agents, and rules, or run a command."
+      description="Search skills, agents, rules, and projects, or run a command."
       onOpenChange={(next) => {
         onOpenChange(next);
         if (!next) {
@@ -129,6 +166,25 @@ export function CommandPalette({
       />
       <CommandList>
         <CommandEmpty title={`No match for “${query.trim()}”`} />
+        {projectMatches.length > 0 ? (
+          <CommandGroup heading="Projects">
+            {projectMatches.map((candidate) => (
+              <CommandItem
+                key={candidate.path}
+                onSelect={() => close(() => onOpenProject(candidate.path))}
+                value={`project-${candidate.path}`}
+              >
+                <Folder />
+                <CommandItemContent>
+                  <CommandItemTitle>{candidate.label}</CommandItemTitle>
+                  <CommandItemDescription>
+                    {displayPath(candidate.path, home)}
+                  </CommandItemDescription>
+                </CommandItemContent>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ) : null}
         {matches.length > 0 ? (
           <CommandGroup heading="Library">
             {matches.map((file) => (

@@ -88,7 +88,7 @@ export function PromptHistoryList({
         </Text>
         <InputGroup className="w-64" size="sm">
           <InputGroupAddon>
-            <Search aria-hidden="true" className="size-3.5" />
+            <Search aria-hidden="true" />
           </InputGroupAddon>
           <Input
             aria-label="Search prompts"
@@ -129,7 +129,7 @@ export function PromptHistoryList({
           title="No prompts found"
         />
       ) : (
-        <ul className="flex flex-col divide-y divide-border">
+        <ul className="divide-border flex flex-col divide-y">
           {visibleEntries.map((entry) => (
             <PromptHistoryItem
               entry={entry}

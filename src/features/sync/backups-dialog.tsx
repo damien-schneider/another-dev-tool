@@ -38,7 +38,7 @@ import { CircleAlert } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { displayPath } from "@/features/destinations/destination-path";
-import { pathName } from "@/features/library/library-model";
+import { pathName } from "@/features/library/library-paths";
 import { useHomeDirectory } from "@/lib/home-dir";
 import { listBackups, restoreBackup, toIpcError } from "@/lib/ipc";
 import type { Backup } from "@/lib/ipc-types";
@@ -116,7 +116,7 @@ function BackupList({ onRestored }: { onRestored: () => void }) {
 
   if (state.status === "error") {
     return (
-      <Alert variant="destructive">
+      <Alert tone="danger">
         <CircleAlert />
         <AlertTitle>Backups could not be read</AlertTitle>
         <AlertDescription>{state.message}</AlertDescription>
@@ -279,7 +279,7 @@ function RestoreBackupDialog({
             </Text>
           ) : null}
           {error ? (
-            <Text as="p" role="alert" tone="destructive">
+            <Text as="p" role="alert" tone="danger">
               {error}
             </Text>
           ) : null}

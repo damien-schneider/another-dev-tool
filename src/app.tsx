@@ -14,27 +14,38 @@ import {
   SidebarRail,
 } from "@ctrl-ui/react/ui/sidebar";
 import { Settings } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PRIMARY_VIEWS, VIEW_IDS, type ViewId } from "./app-views";
+import { useAgentSession } from "./features/agent/use-agent-session";
 import { CommandPalette } from "./features/command/command-palette";
 import { DuplicatesView } from "./features/duplicates/duplicates-view";
+import { ExplainView } from "./features/explain/view/explain-view";
 import { EditorPane } from "./features/library/editor-pane";
+import { buildLibraryModel } from "./features/library/library-model";
 import { LibraryPanel } from "./features/library/library-panel";
-import { NewSkillDialog } from "./features/library/new-skill-dialog";
+import { projectOf } from "./features/library/library-projects";
+import {
+  NewSkillDialog,
+  type SkillDraft,
+} from "./features/library/new-skill-dialog";
 import { UnsavedChangesDialog } from "./features/library/unsaved-changes-dialog";
 import {
   readLastOpenedFileId,
   useLibraryFile,
 } from "./features/library/use-library-file";
 import { useLibraryIndex } from "./features/library/use-library-index";
+import { useSidePanel } from "./features/library/use-side-panel";
+import { PatternsView } from "./features/patterns/patterns-view";
 import { useFavoriteProjects } from "./features/projects/use-favorite-projects";
+import { useOpenProject } from "./features/projects/use-open-project";
 import { PromptHistoryView } from "./features/prompts/prompt-history-view";
 import { useScan } from "./features/scan/use-scan";
 import { SettingsView } from "./features/settings/settings-view";
 import { GroupsView } from "./features/sync/groups-view";
 import { UpdateButton } from "./features/updates/update-button";
 import { useAppUpdate } from "./features/updates/use-app-update";
+import { useHomeDirectory } from "./lib/home-dir";
 import type { FileRow } from "./lib/ipc-types";
 import { ViewBoundary } from "./shared/components/error-boundary";
 import { useAppReloadShortcut } from "./use-app-reload-shortcut";
@@ -57,13 +68,36 @@ export function App() {
   const [panelOpen, setPanelOpen] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [newSkillOpen, setNewSkillOpen] = useState(false);
+  const [skillDraft, setSkillDraft] = useState<SkillDraft | null>(null);
   const [awaitedFileId, setAwaitedFileId] = useState<number | null>(null);
   const [restoringFileId, setRestoringFileId] = useState(readLastOpenedFileId);
   const index = useLibraryIndex();
-  const library = useLibraryFile();
+  const home = useHomeDirectory();
+  const openProject = useOpenProject();
+  const { roots } = index;
+  const showProject = openProject.open;
+  const projectShown = openProject.path !== null;
+  const followOpenedFile = useCallback(
+    (file: FileRow, through: string | null) => {
+      // Until home resolves, a file in ~/.claude would pass for a project's.
+      const project =
+        home === null ? null : projectOf(file, roots, home, through);
+      if (projectShown && project !== null) {
+        showProject(project);
+      }
+    },
+    [home, projectShown, roots, showProject]
+  );
+  const library = useLibraryFile(followOpenedFile);
   const favoriteProjects = useFavoriteProjects();
+  const { favoritePaths } = favoriteProjects;
+  const projects = useMemo(
+    () => buildLibraryModel(index.files, roots, home, favoritePaths).projects,
+    [index.files, roots, home, favoritePaths]
+  );
   const scan = useScan();
   const update = useAppUpdate();
+  const sidePanel = useSidePanel();
 
   const selectView = useCallback((next: ViewId) => {
     setMountedViews((current) =>
@@ -72,6 +106,14 @@ export function App() {
     setView(next);
     window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, next);
   }, []);
+  const goToProject = useCallback(
+    (path: string | null) => {
+      selectView("library");
+      setPanelOpen(true);
+      showProject(path);
+    },
+    [selectView, showProject]
+  );
 
   const selectFile = library.select;
   const openFile = useCallback(
@@ -107,7 +149,14 @@ export function App() {
     }
   }, [index.files, index.ready, restoringFileId, selectFile]);
 
-  const openNewSkill = useCallback(() => setNewSkillOpen(true), []);
+  const openNewSkill = useCallback(() => {
+    setSkillDraft(null);
+    setNewSkillOpen(true);
+  }, []);
+  const createSkillFrom = useCallback((draft: SkillDraft) => {
+    setSkillDraft(draft);
+    setNewSkillOpen(true);
+  }, []);
   useAppShortcuts({
     onOpenPalette: () => setPaletteOpen(true),
     onNewSkill: openNewSkill,
@@ -123,6 +172,17 @@ export function App() {
   const selected =
     index.files.find((file) => file.id === library.fileId) ??
     (library.file?.id === library.fileId ? library.file : null);
+  const agent = useAgentSession(selected?.id ?? null);
+  const showSidePanel = sidePanel.show;
+  const prefillAgent = agent.prefill;
+  const openInEditor = useCallback(
+    (file: FileRow, prompt: string) => {
+      openFile(file);
+      showSidePanel("agent");
+      prefillAgent(file.id, prompt);
+    },
+    [openFile, prefillAgent, showSidePanel]
+  );
   // With nothing open the tree is the only way in, so it cannot be folded away;
   // a fold asked for then is dropped rather than springing on the next file.
   const foldTree = (open: boolean) => {
@@ -174,7 +234,7 @@ export function App() {
                       {unsaved ? (
                         <span
                           aria-hidden="true"
-                          className="pointer-events-none absolute end-1 top-1 size-1.5 rounded-full bg-warning"
+                          className="bg-warning pointer-events-none absolute end-1 top-1 size-1.5 rounded-full"
                         />
                       ) : null}
                     </SidebarMenuItem>
@@ -205,12 +265,24 @@ export function App() {
         <SidebarPanel layer="sidebar">
           <ViewBoundary label="library list">
             <LibraryPanel
-              favoritePaths={favoriteProjects.favoritePaths}
+              favoritePaths={favoritePaths}
               index={index}
               onNewSkill={openNewSkill}
+              onOpenProject={openProject.open}
               onOpenSettings={() => selectView("settings")}
+              onReference={
+                agent.available && selected
+                  ? (reference) => {
+                      agent.addReference(reference);
+                      sidePanel.show("agent");
+                    }
+                  : undefined
+              }
               onSelectFile={library.select}
+              onToggleFavorite={favoriteProjects.toggle}
+              project={openProject.path}
               scan={scan}
+              selectedAlias={library.openedThroughLink}
               selectedFileId={library.fileId}
             />
           </ViewBoundary>
@@ -222,10 +294,11 @@ export function App() {
         <div className="h-full min-h-0" hidden={view !== "library"}>
           <ViewBoundary label="editor">
             <EditorPane
+              agent={agent}
               editor={library.editor}
               favorite={
                 selected?.projectDir
-                  ? favoriteProjects.favoritePaths.has(selected.projectDir)
+                  ? favoritePaths.has(selected.projectDir)
                   : false
               }
               file={selected}
@@ -233,15 +306,45 @@ export function App() {
               onClose={library.close}
               onNewSkill={openNewSkill}
               onOpenFile={library.select}
+              onShowOriginal={() => {
+                if (selected) {
+                  setPanelOpen(true);
+                  library.select(selected);
+                }
+              }}
               onToggleFavorite={favoriteProjects.toggle}
+              openedThroughLink={library.openedThroughLink}
               scan={scan}
+              sidePanel={sidePanel}
             />
           </ViewBoundary>
         </div>
+        {mountedViews.has("explain") ? (
+          <div className="h-full min-h-0" hidden={view !== "explain"}>
+            <ViewBoundary label="explain">
+              <ExplainView
+                favoritePaths={favoritePaths}
+                onToggleFavorite={favoriteProjects.toggle}
+                projects={projects}
+              />
+            </ViewBoundary>
+          </div>
+        ) : null}
         {mountedViews.has("prompts") ? (
           <div className="h-full min-h-0" hidden={view !== "prompts"}>
             <ViewBoundary label="prompts">
               <PromptHistoryView />
+            </ViewBoundary>
+          </div>
+        ) : null}
+        {mountedViews.has("patterns") ? (
+          <div className="h-full min-h-0" hidden={view !== "patterns"}>
+            <ViewBoundary label="patterns">
+              <PatternsView
+                files={index.files}
+                onCreateSkill={createSkillFrom}
+                onOpenInEditor={openInEditor}
+              />
             </ViewBoundary>
           </div>
         ) : null}
@@ -280,15 +383,20 @@ export function App() {
         onNewSkill={openNewSkill}
         onOpenChange={setPaletteOpen}
         onOpenFile={openFile}
+        onOpenProject={goToProject}
         onRescan={startScan}
         onSelectView={selectView}
         open={paletteOpen}
+        project={openProject.path}
+        projects={projects}
       />
       <NewSkillDialog
+        draft={skillDraft}
         files={index.files}
         onCreated={setAwaitedFileId}
         onOpenChange={setNewSkillOpen}
         open={newSkillOpen}
+        project={openProject.path}
         roots={index.roots}
         selectedFile={selected}
       />
