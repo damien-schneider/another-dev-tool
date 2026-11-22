@@ -1,8 +1,13 @@
 pub mod agent;
+pub mod agent_history;
+pub mod agent_relay;
 pub mod destinations;
+pub mod explain;
 pub mod favorite_projects;
 pub mod files;
+pub mod history;
 pub mod install;
+pub mod patterns;
 pub mod prompts;
 pub mod roots;
 pub mod scan;

@@ -1,8 +1,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter as _};
 
+use crate::agent::Part;
 use crate::capture::CaptureAccessStatus;
 use crate::db::prompts_repo::PromptHistoryEntry;
+use crate::patterns::Progress;
 use crate::scanner::ScanStats;
 
 pub const SCAN_PROGRESS: &str = "scan:progress";
@@ -14,9 +16,12 @@ pub const CAPTURE_ERROR: &str = "capture:error";
 pub const CAPTURE_ACCESS_CHANGED: &str = "capture:access-changed";
 pub const CAPTURE_SHORTCUT_PROGRESS: &str = "capture:shortcut-progress";
 pub const AGENT_DELTA: &str = "agent:delta";
-pub const AGENT_TOOL: &str = "agent:tool";
+pub const AGENT_PART: &str = "agent:part";
 pub const AGENT_DONE: &str = "agent:done";
 pub const AGENT_ERROR: &str = "agent:error";
+pub const PATTERNS_PROGRESS: &str = "patterns:progress";
+pub const PATTERNS_DONE: &str = "patterns:done";
+pub const PATTERNS_ERROR: &str = "patterns:error";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,15 +70,16 @@ pub struct CaptureShortcutProgress {
 #[serde(rename_all = "camelCase")]
 pub struct AgentDelta {
     pub run_id: u64,
-    pub block: u32,
+    pub index: u32,
     pub text: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentTool {
+pub struct AgentPart {
     pub run_id: u64,
-    pub name: String,
+    pub index: u32,
+    pub part: Part,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -91,12 +97,24 @@ pub struct AgentError {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternsDone {
+    pub cancelled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatternsError {
+    pub message: String,
+}
+
 pub fn emit_agent_delta(app: &AppHandle, payload: AgentDelta) {
     let _ = app.emit(AGENT_DELTA, payload);
 }
 
-pub fn emit_agent_tool(app: &AppHandle, payload: AgentTool) {
-    let _ = app.emit(AGENT_TOOL, payload);
+pub fn emit_agent_part(app: &AppHandle, payload: AgentPart) {
+    let _ = app.emit(AGENT_PART, payload);
 }
 
 pub fn emit_agent_done(app: &AppHandle, payload: AgentDone) {
@@ -105,6 +123,18 @@ pub fn emit_agent_done(app: &AppHandle, payload: AgentDone) {
 
 pub fn emit_agent_error(app: &AppHandle, payload: AgentError) {
     let _ = app.emit(AGENT_ERROR, payload);
+}
+
+pub fn emit_patterns_progress(app: &AppHandle, progress: Progress) {
+    let _ = app.emit(PATTERNS_PROGRESS, progress);
+}
+
+pub fn emit_patterns_done(app: &AppHandle, cancelled: bool) {
+    let _ = app.emit(PATTERNS_DONE, PatternsDone { cancelled });
+}
+
+pub fn emit_patterns_error(app: &AppHandle, message: String) {
+    let _ = app.emit(PATTERNS_ERROR, PatternsError { message });
 }
 
 pub fn emit_scan_progress(app: &AppHandle, payload: ScanProgress) {
@@ -183,5 +213,30 @@ mod tests {
         let json = serde_json::to_value(CaptureShortcutProgress { completed_taps: 2 }).unwrap();
 
         assert_eq!(json["completedTaps"], 2);
+    }
+
+    #[test]
+    fn agent_payloads_use_camel_case_and_carry_the_part_index() {
+        let delta = serde_json::to_value(AgentDelta {
+            run_id: 3,
+            index: 1,
+            text: "hel".into(),
+        })
+        .unwrap();
+        let part = serde_json::to_value(AgentPart {
+            run_id: 3,
+            index: 0,
+            part: Part::Text { text: "hi".into() },
+        })
+        .unwrap();
+
+        assert_eq!(
+            delta,
+            serde_json::json!({"runId": 3, "index": 1, "text": "hel"})
+        );
+        assert_eq!(
+            part,
+            serde_json::json!({"runId": 3, "index": 0, "part": {"kind": "text", "text": "hi"}})
+        );
     }
 }

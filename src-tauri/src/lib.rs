@@ -4,8 +4,12 @@ mod commands;
 mod db;
 mod error;
 mod events;
+mod explain;
 mod fsops;
+mod git;
+mod managed_by;
 mod paths;
+mod patterns;
 mod scanner;
 mod state;
 mod sync;
@@ -52,7 +56,12 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()?;
             let db = Db::open(&app_data_dir.join(DB_FILE))?;
             commands::roots::seed_default_roots(&db)?;
-            app.manage(AppState::new(db, app_data_dir.join("prompt-attachments")));
+            app.manage(AppState::new(
+                db,
+                app_data_dir.join("prompt-attachments"),
+                app_data_dir.join("agent-conversations"),
+                app_data_dir.join("explainer-plugin"),
+            ));
 
             let handle = app.handle().clone();
             let state = handle.state::<AppState>();
@@ -86,6 +95,9 @@ pub fn run() {
             commands::files::trash_file,
             commands::files::list_duplicates,
             commands::files::list_file_links,
+            commands::history::file_history,
+            commands::history::file_commit_change,
+            commands::history::file_working_change,
             commands::watcher::get_watcher_status,
             commands::watcher::set_watcher_enabled,
             commands::sync::list_sync_groups,
@@ -102,7 +114,19 @@ pub fn run() {
             commands::install::install_files,
             commands::agent::agent_status,
             commands::agent::agent_send,
+            commands::agent::agent_conversations,
+            commands::agent::agent_conversation,
             commands::agent::agent_cancel,
+            commands::explain::explain_send,
+            commands::explain::explain_cancel,
+            commands::explain::explain_conversations,
+            commands::explain::explain_conversation,
+            commands::explain::explain_recent_projects,
+            commands::explain::explain_read_source,
+            commands::patterns::patterns_state,
+            commands::patterns::patterns_analyze,
+            commands::patterns::patterns_cancel,
+            commands::patterns::patterns_dismiss,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -119,6 +119,7 @@ mod tests {
                     kind: FileKind::Skill,
                     name: Some("a".to_string()),
                     project_dir: None,
+                    repository_dir: None,
                     size: 1,
                     mtime_ns: 1,
                     hash: "h".to_string(),

@@ -20,6 +20,8 @@ pub struct FileRow {
     /// Frontmatter `description` of a skill, agent or rule; `None` for every other kind.
     pub description: Option<String>,
     pub project_dir: Option<String>,
+    /// The repository `project_dir` checks out when it is a linked git worktree.
+    pub repository_dir: Option<String>,
     pub size: i64,
     pub mtime_ns: i64,
     pub hash: String,
@@ -43,6 +45,7 @@ pub struct FileRecord {
     pub kind: FileKind,
     pub name: Option<String>,
     pub project_dir: Option<String>,
+    pub repository_dir: Option<String>,
     pub size: i64,
     pub mtime_ns: i64,
     pub hash: String,
@@ -69,7 +72,8 @@ pub const SELECT: &str = "SELECT id, root_id, path, rel_path, kind, name, projec
                              mtime_ns, hash, is_symlink, symlink_target, first_seen_at,
                              last_seen_scan_id, deleted_at, description,
                              (SELECT json_group_array(file_aliases.path) FROM file_aliases
-                              WHERE file_aliases.file_id = files.id)
+                              WHERE file_aliases.file_id = files.id),
+                             repository_dir
                       FROM files";
 
 fn aliases_of(row: &Row) -> rusqlite::Result<Vec<String>> {
@@ -103,6 +107,7 @@ pub fn map_row(row: &Row) -> rusqlite::Result<FileRow> {
         name: row.get(5)?,
         description: row.get(15)?,
         project_dir: row.get(6)?,
+        repository_dir: row.get(17)?,
         size: row.get(7)?,
         mtime_ns: row.get(8)?,
         hash: row.get(9)?,
@@ -252,14 +257,15 @@ pub fn upsert(conn: &Connection, record: &FileRecord, scan_id: i64, now_ms: i64)
     conn.execute(
         "INSERT INTO files (root_id, path, rel_path, kind, name, project_dir, size, mtime_ns,
                             hash, is_symlink, symlink_target, first_seen_at, last_seen_scan_id,
-                            deleted_at, real_path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14)
+                            deleted_at, real_path, repository_dir)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL, ?14, ?15)
          ON CONFLICT(path) DO UPDATE SET
              root_id = excluded.root_id,
              rel_path = excluded.rel_path,
              kind = excluded.kind,
              name = excluded.name,
              project_dir = excluded.project_dir,
+             repository_dir = excluded.repository_dir,
              size = excluded.size,
              mtime_ns = excluded.mtime_ns,
              hash = excluded.hash,
@@ -283,6 +289,7 @@ pub fn upsert(conn: &Connection, record: &FileRecord, scan_id: i64, now_ms: i64)
             now_ms,
             scan_id,
             record.real_path,
+            record.repository_dir,
         ],
     )?;
 
@@ -429,6 +436,7 @@ mod tests {
             kind,
             name: None,
             project_dir: Some("/repo".to_string()),
+            repository_dir: None,
             size: 10,
             mtime_ns: 1_000,
             hash: hash.to_string(),

@@ -236,6 +236,8 @@ mod tests {
         let state = AppState::new(
             Db::open_in_memory().unwrap(),
             app_data.path().join("prompts"),
+            app_data.path().join("agent"),
+            app_data.path().join("explainer"),
         );
 
         let prompt = create_prompt_in(
@@ -288,7 +290,12 @@ mod tests {
     fn stores_prompt_images_in_their_final_directory() {
         let app_data = tempdir().unwrap();
         let attachment_root = app_data.path().join("prompt-attachments");
-        let state = AppState::new(Db::open_in_memory().unwrap(), attachment_root);
+        let state = AppState::new(
+            Db::open_in_memory().unwrap(),
+            attachment_root,
+            tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
+        );
         let image = PendingPromptImage {
             rgba: vec![255, 0, 0, 255],
             width: 1,
@@ -320,7 +327,12 @@ mod tests {
         let attachment_root = app_data.path().join("prompt-attachments");
         fs::create_dir_all(&attachment_root).unwrap();
         fs::write(attachment_root.join("1"), b"blocks directory creation").unwrap();
-        let state = AppState::new(Db::open_in_memory().unwrap(), attachment_root);
+        let state = AppState::new(
+            Db::open_in_memory().unwrap(),
+            attachment_root,
+            tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
+        );
         let image = PendingPromptImage {
             rgba: vec![255, 0, 0, 255],
             width: 1,
@@ -341,7 +353,12 @@ mod tests {
     fn deletes_a_prompt_and_its_attachments() {
         let app_data = tempdir().unwrap();
         let attachment_root = app_data.path().join("prompt-attachments");
-        let state = AppState::new(Db::open_in_memory().unwrap(), attachment_root);
+        let state = AppState::new(
+            Db::open_in_memory().unwrap(),
+            attachment_root,
+            tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
+        );
         let image = PendingPromptImage {
             rgba: vec![255, 0, 0, 255],
             width: 1,

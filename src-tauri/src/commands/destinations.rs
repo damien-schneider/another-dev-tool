@@ -75,7 +75,12 @@ mod tests {
     use tempfile::tempdir;
 
     fn state() -> AppState {
-        AppState::new(Db::open_in_memory().unwrap(), tempdir().unwrap().keep())
+        AppState::new(
+            Db::open_in_memory().unwrap(),
+            tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
+        )
     }
 
     #[test]

@@ -1,4 +1,4 @@
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 12;
 
 pub const MIGRATION_1: &str = r"
 CREATE TABLE IF NOT EXISTS roots (
@@ -146,4 +146,83 @@ CREATE TABLE IF NOT EXISTS file_aliases (
 
 CREATE INDEX IF NOT EXISTS file_aliases_file_idx ON file_aliases(file_id);
 CREATE INDEX IF NOT EXISTS file_aliases_root_idx ON file_aliases(root_id);
+";
+
+/// `started` says whether Claude Code already holds the session, so the next
+/// turn resumes it instead of opening a new one under the same id.
+pub const MIGRATION_8: &str = r"
+CREATE TABLE IF NOT EXISTS agent_conversations (
+    id         TEXT    PRIMARY KEY,
+    file_id    INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    title      TEXT    NOT NULL,
+    started    INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS agent_conversations_file_idx
+ON agent_conversations(file_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id              INTEGER PRIMARY KEY,
+    conversation_id TEXT    NOT NULL REFERENCES agent_conversations(id) ON DELETE CASCADE,
+    role            TEXT    NOT NULL,
+    text            TEXT    NOT NULL,
+    images          TEXT    NOT NULL DEFAULT '[]',
+    created_at      INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS agent_messages_conversation_idx
+ON agent_messages(conversation_id, id);
+";
+
+pub const MIGRATION_9: &str = r"
+ALTER TABLE agent_messages ADD COLUMN parts TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE agent_messages ADD COLUMN meta TEXT;
+";
+
+/// `finding` is the JSON the Patterns view shows; dismissed rows stay so the next run is told
+/// never to propose them again.
+pub const MIGRATION_10: &str = r"
+CREATE TABLE IF NOT EXISTS patterns (
+    id           INTEGER PRIMARY KEY,
+    finding      TEXT    NOT NULL,
+    rank         INTEGER NOT NULL,
+    found_at     INTEGER NOT NULL,
+    dismissed_at INTEGER
+);
+";
+
+/// Filled by the next scan, which rewrites every walked row.
+pub const MIGRATION_11: &str = r"
+ALTER TABLE files ADD COLUMN repository_dir TEXT;
+";
+
+/// Explanations belong to a folder, not an indexed file: any project can be explained, and
+/// its conversations survive the folder leaving the library.
+pub const MIGRATION_12: &str = r"
+CREATE TABLE IF NOT EXISTS explain_conversations (
+    id          TEXT    PRIMARY KEY,
+    project_dir TEXT    NOT NULL,
+    title       TEXT    NOT NULL,
+    started     INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS explain_conversations_project_idx
+ON explain_conversations(project_dir, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS explain_messages (
+    id              INTEGER PRIMARY KEY,
+    conversation_id TEXT    NOT NULL REFERENCES explain_conversations(id) ON DELETE CASCADE,
+    role            TEXT    NOT NULL,
+    text            TEXT    NOT NULL,
+    parts           TEXT    NOT NULL DEFAULT '[]',
+    meta            TEXT,
+    created_at      INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS explain_messages_conversation_idx
+ON explain_messages(conversation_id, id);
 ";

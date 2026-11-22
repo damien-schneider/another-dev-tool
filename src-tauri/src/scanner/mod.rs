@@ -6,6 +6,7 @@ pub mod refs;
 pub mod store;
 pub mod targets;
 pub mod walk;
+pub mod worktree;
 
 #[cfg(test)]
 mod alias_tests;
@@ -673,6 +674,37 @@ mod tests {
         let loose = files.iter().find(|f| f.path.contains("loose")).unwrap();
         assert!(in_repo.project_dir.as_ref().unwrap().ends_with("repo"));
         assert_eq!(loose.project_dir, None);
+    }
+
+    #[test]
+    fn records_the_repository_a_worktree_checks_out_even_for_unchanged_files() {
+        let (db, dir, root) = setup();
+        let repository = dir.path().join("mastra/mastra");
+        fs::create_dir_all(repository.join(".git/worktrees/fix-auth")).unwrap();
+        write(
+            &dir.path().join("mastra/.worktrees/fix-auth/.git"),
+            &format!(
+                "gitdir: {}",
+                repository.join(".git/worktrees/fix-auth").display()
+            ),
+        );
+        write(
+            &dir.path().join("mastra/.worktrees/fix-auth/AGENTS.md"),
+            "a",
+        );
+        scan(&db, &root);
+        db.with_conn(|conn| Ok(conn.execute("UPDATE files SET repository_dir = NULL", [])?))
+            .unwrap();
+
+        scan(&db, &root);
+
+        let files = db
+            .with_conn(|conn| files_repo::list(conn, &FileFilter::default()))
+            .unwrap();
+        assert_eq!(
+            files[0].repository_dir.as_deref(),
+            Some(repository.to_string_lossy().as_ref())
+        );
     }
 
     #[test]

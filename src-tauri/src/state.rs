@@ -4,7 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use crate::agent::AgentRuntime;
 use crate::db::Db;
+use crate::explain::Explainer;
 use crate::error::{AppError, AppResult};
+use crate::patterns::Runner;
 use crate::watcher::WatcherHandle;
 
 pub struct RunningScan {
@@ -15,17 +17,28 @@ pub struct RunningScan {
 pub struct AppState {
     pub db: Arc<Db>,
     pub prompt_attachments_dir: PathBuf,
+    pub agent_dir: PathBuf,
     pub agent: AgentRuntime,
+    pub explainer: Explainer,
+    pub patterns: Runner,
     scan: Mutex<Option<RunningScan>>,
     watcher: Mutex<Option<WatcherHandle>>,
 }
 
 impl AppState {
-    pub fn new(db: Db, prompt_attachments_dir: PathBuf) -> Self {
+    pub fn new(
+        db: Db,
+        prompt_attachments_dir: PathBuf,
+        agent_dir: PathBuf,
+        explainer_plugin_dir: PathBuf,
+    ) -> Self {
         Self {
             db: Arc::new(db),
             prompt_attachments_dir,
+            agent_dir,
             agent: AgentRuntime::default(),
+            explainer: Explainer::new(explainer_plugin_dir),
+            patterns: Runner::default(),
             scan: Mutex::new(None),
             watcher: Mutex::new(None),
         }
@@ -91,7 +104,12 @@ mod tests {
     use super::*;
 
     fn state() -> AppState {
-        AppState::new(Db::open_in_memory().unwrap(), PathBuf::from("/tmp/prompts"))
+        AppState::new(
+            Db::open_in_memory().unwrap(),
+            PathBuf::from("/tmp/prompts"),
+            PathBuf::from("/tmp/agent"),
+            PathBuf::from("/tmp/explainer"),
+        )
     }
 
     #[test]

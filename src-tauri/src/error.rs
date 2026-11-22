@@ -27,6 +27,9 @@ pub enum AppError {
     #[error("the Claude Code CLI was not found")]
     AgentMissing,
 
+    #[error("an analysis is already running")]
+    AnalysisBusy,
+
     #[error("{0}")]
     Io(#[from] std::io::Error),
 
@@ -48,6 +51,7 @@ impl AppError {
             Self::ScanBusy => "scan_busy",
             Self::AgentBusy => "agent_busy",
             Self::AgentMissing => "agent_missing",
+            Self::AnalysisBusy => "analysis_busy",
             Self::Io(_) => "io",
             Self::Db(_) => "db",
             Self::Internal(_) => "internal",

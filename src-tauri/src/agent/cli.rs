@@ -5,6 +5,7 @@ use serde::Serialize;
 
 const BINARY: &str = "claude";
 const EXTRA_PATHS: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+const STDERR_TAIL: usize = 600;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -88,6 +89,16 @@ pub fn status() -> AgentStatus {
     }
 }
 
+pub fn crash_reason(stderr: &str) -> String {
+    let tail = stderr.trim();
+    if tail.is_empty() {
+        return "the agent stopped unexpectedly".to_string();
+    }
+    tail.chars()
+        .skip(tail.chars().count().saturating_sub(STDERR_TAIL))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,5 +109,17 @@ mod tests {
 
         assert!(path.starts_with("/Users/someone/.local/bin:"));
         assert!(path.contains("/opt/homebrew/bin"));
+    }
+
+    #[test]
+    fn a_silent_crash_still_reports_something() {
+        assert_eq!(crash_reason("  \n"), "the agent stopped unexpectedly");
+    }
+
+    #[test]
+    fn only_the_tail_of_a_long_stderr_is_kept() {
+        let noise = "x".repeat(STDERR_TAIL + 50);
+
+        assert_eq!(crash_reason(&noise).len(), STDERR_TAIL);
     }
 }

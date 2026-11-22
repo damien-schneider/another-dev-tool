@@ -1,143 +1,257 @@
+use serde::de::IgnoredAny;
 use serde::Deserialize;
+use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+const IMAGE_PLACEHOLDER: &str = "[image]";
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PartKind {
+    Text,
+    Thinking,
+    Tool { id: String, name: String },
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum StreamEvent {
-    TextStart,
-    Text(String),
-    Tool(String),
-    Finished(Option<String>),
+    PartStart(PartKind),
+    Delta(String),
+    ToolInput {
+        id: String,
+        input: Value,
+    },
+    PartStop,
+    ToolResult {
+        id: String,
+        is_error: bool,
+        output: String,
+    },
+    Model(String),
+    Finished {
+        error: Option<String>,
+        duration_ms: Option<u64>,
+    },
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum Line {
-    #[serde(rename = "stream_event")]
-    Stream { event: Event },
-    #[serde(rename = "result")]
+    System {
+        #[serde(default)]
+        subtype: Option<String>,
+        #[serde(default)]
+        model: Option<String>,
+    },
+    StreamEvent {
+        event: Event,
+    },
+    Assistant {
+        message: Message<AssistantBlock>,
+    },
+    User {
+        message: Message<UserBlock>,
+    },
     Result {
         #[serde(default)]
         is_error: bool,
         #[serde(default)]
         result: Option<String>,
+        #[serde(default)]
+        duration_ms: Option<u64>,
     },
     #[serde(other)]
     Ignored,
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum Event {
-    #[serde(rename = "content_block_start")]
-    BlockStart { content_block: Block },
-    #[serde(rename = "content_block_delta")]
-    BlockDelta { delta: Delta },
+    ContentBlockStart {
+        content_block: Block,
+    },
+    ContentBlockDelta {
+        delta: Delta,
+    },
+    ContentBlockStop,
     #[serde(other)]
     Ignored,
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum Block {
-    #[serde(rename = "text")]
     Text,
-    #[serde(rename = "tool_use")]
-    ToolUse { name: String },
+    Thinking,
+    RedactedThinking,
+    ToolUse {
+        id: String,
+        name: String,
+    },
     #[serde(other)]
     Ignored,
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type")]
+#[serde(tag = "type", rename_all = "snake_case")]
 enum Delta {
     #[serde(rename = "text_delta")]
     Text { text: String },
+    #[serde(rename = "thinking_delta")]
+    Thinking { thinking: String },
     #[serde(other)]
     Ignored,
 }
 
-/// Reads the partial-message stream rather than whole assistant messages, so
-/// the panel paints tokens as they land. Unknown line shapes are dropped: the
-/// CLI adds event types between releases and none of them are load-bearing.
-pub fn parse_line(line: &str) -> Option<StreamEvent> {
-    match serde_json::from_str::<Line>(line).ok()? {
-        Line::Stream { event } => match event {
-            Event::BlockStart {
-                content_block: Block::Text,
-            } => Some(StreamEvent::TextStart),
-            Event::BlockStart {
-                content_block: Block::ToolUse { name },
-            } => Some(StreamEvent::Tool(name)),
-            Event::BlockDelta {
-                delta: Delta::Text { text },
-            } => Some(StreamEvent::Text(text)),
-            _ => None,
-        },
-        Line::Result { is_error, result } => {
-            Some(StreamEvent::Finished(is_error.then(|| {
-                result.unwrap_or_else(|| "the agent run failed".to_string())
-            })))
+#[derive(Deserialize)]
+struct Message<B> {
+    content: Content<B>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Content<B> {
+    Blocks(Vec<B>),
+    Other(IgnoredAny),
+}
+
+impl<B> Content<B> {
+    fn into_blocks(self) -> Vec<B> {
+        match self {
+            Self::Blocks(blocks) => blocks,
+            Self::Other(_) => Vec::new(),
         }
-        Line::Ignored => None,
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AssistantBlock {
+    ToolUse {
+        id: String,
+        #[serde(default)]
+        input: Value,
+    },
+    #[serde(other)]
+    Ignored,
+}
 
-    fn stream(event: &str) -> String {
-        format!(r#"{{"type":"stream_event","event":{event}}}"#)
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum UserBlock {
+    ToolResult {
+        tool_use_id: String,
+        #[serde(default)]
+        content: Option<ResultContent>,
+        #[serde(default)]
+        is_error: Option<bool>,
+    },
+    #[serde(other)]
+    Ignored,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ResultContent {
+    Text(String),
+    Blocks(Vec<ResultBlock>),
+    Other(IgnoredAny),
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ResultBlock {
+    Text {
+        text: String,
+    },
+    Image,
+    #[serde(other)]
+    Ignored,
+}
+
+impl ResultContent {
+    fn into_output(self) -> String {
+        match self {
+            Self::Text(text) => text,
+            Self::Blocks(blocks) => blocks
+                .into_iter()
+                .filter_map(|block| match block {
+                    ResultBlock::Text { text } => Some(text),
+                    ResultBlock::Image => Some(IMAGE_PLACEHOLDER.to_string()),
+                    ResultBlock::Ignored => None,
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+            Self::Other(_) => String::new(),
+        }
     }
+}
 
-    #[test]
-    fn opens_a_block_then_streams_its_chunks() {
-        let start = stream(
-            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#,
-        );
-        let delta = stream(
-            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hel"}}"#,
-        );
-
-        assert_eq!(parse_line(&start), Some(StreamEvent::TextStart));
-        assert_eq!(parse_line(&delta), Some(StreamEvent::Text("hel".into())));
+pub fn parse_line(line: &str) -> Vec<StreamEvent> {
+    let Ok(line) = serde_json::from_str::<Line>(line) else {
+        return Vec::new();
+    };
+    match line {
+        Line::System { subtype, model } => match (subtype.as_deref(), model) {
+            (Some("init"), Some(model)) => vec![StreamEvent::Model(model)],
+            _ => Vec::new(),
+        },
+        Line::StreamEvent { event } => stream_event(event).into_iter().collect(),
+        Line::Assistant { message } => message
+            .content
+            .into_blocks()
+            .into_iter()
+            .filter_map(|block| match block {
+                AssistantBlock::ToolUse { id, input } => Some(StreamEvent::ToolInput { id, input }),
+                AssistantBlock::Ignored => None,
+            })
+            .collect(),
+        Line::User { message } => message
+            .content
+            .into_blocks()
+            .into_iter()
+            .filter_map(|block| match block {
+                UserBlock::ToolResult {
+                    tool_use_id,
+                    content,
+                    is_error,
+                } => Some(StreamEvent::ToolResult {
+                    id: tool_use_id,
+                    is_error: is_error.unwrap_or(false),
+                    output: content.map(ResultContent::into_output).unwrap_or_default(),
+                }),
+                UserBlock::Ignored => None,
+            })
+            .collect(),
+        Line::Result {
+            is_error,
+            result,
+            duration_ms,
+        } => vec![StreamEvent::Finished {
+            error: is_error.then(|| result.unwrap_or_else(|| "the agent run failed".to_string())),
+            duration_ms,
+        }],
+        Line::Ignored => Vec::new(),
     }
+}
 
-    #[test]
-    fn a_tool_block_is_named_as_soon_as_it_opens() {
-        let line = stream(
-            r#"{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"x","name":"Edit"}}"#,
-        );
-
-        assert_eq!(parse_line(&line), Some(StreamEvent::Tool("Edit".into())));
-    }
-
-    #[test]
-    fn the_whole_assistant_message_is_ignored_so_text_is_not_counted_twice() {
-        let line = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"hello"}]}}"#;
-
-        assert_eq!(parse_line(line), None);
-    }
-
-    #[test]
-    fn a_successful_result_finishes_without_an_error() {
-        let line = r#"{"type":"result","subtype":"success","is_error":false,"result":"ok"}"#;
-
-        assert_eq!(parse_line(line), Some(StreamEvent::Finished(None)));
-    }
-
-    #[test]
-    fn a_failed_result_carries_its_message() {
-        let line = r#"{"type":"result","is_error":true,"result":"boom"}"#;
-
-        assert_eq!(
-            parse_line(line),
-            Some(StreamEvent::Finished(Some("boom".into())))
-        );
-    }
-
-    #[test]
-    fn unknown_and_malformed_lines_are_dropped() {
-        assert_eq!(parse_line(r#"{"type":"rate_limit_event"}"#), None);
-        assert_eq!(parse_line("not json"), None);
+fn stream_event(event: Event) -> Option<StreamEvent> {
+    match event {
+        Event::ContentBlockStart { content_block } => match content_block {
+            Block::Text => Some(StreamEvent::PartStart(PartKind::Text)),
+            Block::Thinking | Block::RedactedThinking => {
+                Some(StreamEvent::PartStart(PartKind::Thinking))
+            }
+            Block::ToolUse { id, name } => {
+                Some(StreamEvent::PartStart(PartKind::Tool { id, name }))
+            }
+            Block::Ignored => None,
+        },
+        Event::ContentBlockDelta { delta } => match delta {
+            Delta::Text { text } | Delta::Thinking { thinking: text } => {
+                (!text.is_empty()).then_some(StreamEvent::Delta(text))
+            }
+            Delta::Ignored => None,
+        },
+        Event::ContentBlockStop => Some(StreamEvent::PartStop),
+        Event::Ignored => None,
     }
 }

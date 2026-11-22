@@ -1,10 +1,13 @@
+pub mod agent_repo;
 pub mod aliases_repo;
 pub mod backups_repo;
 pub mod destinations_repo;
+pub mod explain_repo;
 pub mod favorite_projects_repo;
 pub mod files_repo;
 pub mod groups_repo;
 pub mod links_repo;
+pub mod patterns_repo;
 pub mod prompts_repo;
 pub mod roots_repo;
 pub mod schema;
@@ -119,6 +122,21 @@ impl Db {
         if version < 7 {
             conn.execute_batch(schema::MIGRATION_7)?;
         }
+        if version < 8 {
+            conn.execute_batch(schema::MIGRATION_8)?;
+        }
+        if version < 9 {
+            conn.execute_batch(schema::MIGRATION_9)?;
+        }
+        if version < 10 {
+            conn.execute_batch(schema::MIGRATION_10)?;
+        }
+        if version < 11 {
+            conn.execute_batch(schema::MIGRATION_11)?;
+        }
+        if version < 12 {
+            conn.execute_batch(schema::MIGRATION_12)?;
+        }
 
         conn.execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2)
@@ -192,6 +210,11 @@ mod tests {
             "prompt_attachments",
             "file_refs",
             "file_aliases",
+            "agent_conversations",
+            "agent_messages",
+            "patterns",
+            "explain_conversations",
+            "explain_messages",
         ] {
             assert!(tables.iter().any(|t| t == expected), "missing {expected}");
         }
@@ -384,6 +407,50 @@ mod tests {
             })
             .unwrap();
         assert_eq!(owed, 2, "migrated rows still owe their description");
+    }
+
+    #[test]
+    fn migrating_from_version_eight_gives_old_answers_empty_parts_and_no_meta() {
+        let conn = Connection::open_in_memory().unwrap();
+        for migration in [
+            schema::MIGRATION_1,
+            schema::MIGRATION_2,
+            schema::MIGRATION_3,
+            schema::MIGRATION_4,
+            schema::MIGRATION_5,
+            schema::MIGRATION_6,
+            schema::MIGRATION_7,
+            schema::MIGRATION_8,
+        ] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO meta (key, value) VALUES ('schema_version', '8');
+             INSERT INTO roots (id, path, enabled, added_at) VALUES (1, '/repo', 1, 0);
+             INSERT INTO files (id, root_id, path, rel_path, kind, size, mtime_ns, hash,
+                                first_seen_at)
+             VALUES (1, 1, '/repo/SKILL.md', 'SKILL.md', 'skill', 1, 1, 'h', 0);
+             INSERT INTO agent_conversations (id, file_id, title, created_at, updated_at)
+             VALUES ('c', 1, 'Hi', 1, 1);
+             INSERT INTO agent_messages (conversation_id, role, text, created_at)
+             VALUES ('c', 'agent', 'Done.', 2);",
+        )
+        .unwrap();
+
+        let db = Db::from_connection(conn).unwrap();
+
+        let stored = db
+            .with_conn(|conn| agent_repo::messages(conn, "c"))
+            .unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].text, "Done.");
+        assert!(stored[0].parts.is_empty());
+        assert_eq!(stored[0].meta, None);
+        assert_eq!(
+            db.with_conn(|conn| get_meta(conn, META_SCHEMA_VERSION))
+                .unwrap(),
+            Some(schema::SCHEMA_VERSION.to_string())
+        );
     }
 
     #[test]

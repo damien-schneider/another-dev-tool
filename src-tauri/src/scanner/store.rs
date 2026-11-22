@@ -10,6 +10,7 @@ use crate::error::AppResult;
 
 use super::refs::{self, Content};
 use super::walk::{project_dir_of, WalkEntry};
+use super::worktree;
 
 /// One real file ready for the index: its row, what was read from it, its other paths.
 pub struct Indexable {
@@ -30,6 +31,7 @@ pub struct Stored {
 
 pub fn record_for(entry: &WalkEntry, root: &Root, hash: String) -> FileRecord {
     let root_path = Path::new(&root.path);
+    let project_dir = project_dir_of(&entry.path, root_path);
     FileRecord {
         root_id: root.id,
         path: entry.path.to_string_lossy().into_owned(),
@@ -42,7 +44,11 @@ pub fn record_for(entry: &WalkEntry, root: &Root, hash: String) -> FileRecord {
             .into_owned(),
         kind: entry.kind,
         name: refs::name_for(&entry.path, entry.kind),
-        project_dir: project_dir_of(&entry.path, root_path),
+        repository_dir: project_dir
+            .as_deref()
+            .map(Path::new)
+            .and_then(worktree::repository_of),
+        project_dir,
         size: entry.size,
         mtime_ns: entry.mtime_ns,
         hash,
@@ -107,6 +113,7 @@ mod tests {
             kind: FileKind::Skill,
             name: Some("a".to_string()),
             project_dir: None,
+            repository_dir: None,
             size: 1,
             mtime_ns: 1,
             hash: "h".to_string(),

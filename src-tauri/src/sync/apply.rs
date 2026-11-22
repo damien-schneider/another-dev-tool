@@ -341,6 +341,7 @@ mod tests {
             kind: FileKind::AgentsMd,
             name: None,
             project_dir: None,
+            repository_dir: None,
             size: stat.size,
             mtime_ns: stat.mtime_ns,
             hash: hash_bytes(&bytes),

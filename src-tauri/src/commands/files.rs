@@ -9,6 +9,7 @@ use crate::db::roots_repo;
 use crate::error::{AppError, AppResult};
 use crate::events;
 use crate::fsops;
+use crate::managed_by::{managed_by, ManagedBy};
 use crate::paths::{canonicalize, ensure_openable};
 use crate::scanner::hash::hash_bytes;
 use crate::scanner::refs;
@@ -36,6 +37,7 @@ pub struct FileContent {
     pub mtime_ms: i64,
     pub is_symlink: bool,
     pub symlink_target: Option<String>,
+    pub managed_by: Option<ManagedBy>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -49,7 +51,7 @@ pub struct WriteResult {
 
 /// The row's path is re-resolved and re-checked on every call: the index may be
 /// stale and a command must never touch a file the user has not rooted.
-fn resolve(state: &AppState, file_id: i64) -> AppResult<(FileRow, PathBuf)> {
+pub(crate) fn resolve(state: &AppState, file_id: i64) -> AppResult<(FileRow, PathBuf)> {
     state.db.with_conn(|conn| {
         let row = files_repo::require(conn, file_id)?;
         let roots = roots_repo::list_enabled(conn)?;
@@ -88,6 +90,7 @@ pub fn read_file(state: State<'_, AppState>, file_id: i64) -> AppResult<FileCont
         mtime_ms: stat.mtime_ms(),
         is_symlink: row.is_symlink,
         symlink_target: row.symlink_target,
+        managed_by: managed_by(&path, dirs::home_dir().as_deref()),
     })
 }
 
