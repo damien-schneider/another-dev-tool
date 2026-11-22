@@ -11,7 +11,6 @@ import { Text } from "@ctrl-ui/react/ui/typography";
 import { FolderGit2, GitBranch, Star, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { TreeIndex, TreeNode } from "@/lib/tree";
 import { IconButton } from "@/shared/components/icon-button";
 
 import { EntryItem, ICON_CLASS } from "./entry-item";
@@ -81,7 +80,7 @@ function CollectionItems({ collection }: { collection: LibraryCollection }) {
   );
 }
 
-function GroupItem({
+export function GroupItem({
   id,
   label,
   count,
@@ -232,51 +231,4 @@ export function ScopeContents({
       ) : null}
     </>
   );
-}
-
-function FolderItem({ index, node }: { index: TreeIndex; node: TreeNode }) {
-  const reference = folderReference(node.path, node.name);
-  const drag = useReferenceDrag(reference);
-  return (
-    <TreeItem label={node.name} value={node.id}>
-      <TreeItemTrigger {...drag}>
-        <RevealScope className="flex min-w-0 flex-1 items-center gap-1.5">
-          <TreeItemIndicator />
-          <TreeItemLabel>{node.name}</TreeItemLabel>
-          <ReferenceButton reference={reference} />
-        </RevealScope>
-      </TreeItemTrigger>
-      <TreeItemContent>
-        {node.childIds.map((childId) => (
-          <FolderNode index={index} key={childId} nodeId={childId} />
-        ))}
-      </TreeItemContent>
-    </TreeItem>
-  );
-}
-
-export function FolderNode({
-  index,
-  nodeId,
-}: {
-  index: TreeIndex;
-  nodeId: string;
-}) {
-  const node = index[nodeId];
-  if (!node) {
-    return null;
-  }
-  if (node.file) {
-    return (
-      <EntryItem
-        entry={{
-          id: node.id,
-          file: node.file,
-          path: node.file.path,
-          linked: false,
-        }}
-      />
-    );
-  }
-  return <FolderItem index={index} node={node} />;
 }

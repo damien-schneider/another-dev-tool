@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::UNIX_EPOCH;
 
+use serde::Serialize;
+
 use crate::error::{AppError, AppResult};
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -72,6 +74,38 @@ pub fn atomic_write(path: &Path, content: &str) -> AppResult<()> {
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub is_symlink: bool,
+}
+
+const EDITOR_HIDDEN_NAMES: &[&str] = &[".git", ".hg", ".svn", ".jj", ".DS_Store"];
+
+pub fn list_dir(dir: &Path) -> AppResult<Vec<FolderEntry>> {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(dir)?.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if EDITOR_HIDDEN_NAMES.contains(&name.as_str()) {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(metadata) = fs::metadata(&path) else {
+            continue;
+        };
+        entries.push(FolderEntry {
+            name,
+            path: path.to_string_lossy().into_owned(),
+            is_dir: metadata.is_dir(),
+            is_symlink: entry.file_type().is_ok_and(|kind| kind.is_symlink()),
+        });
+    }
+    Ok(entries)
 }
 
 #[cfg(test)]
@@ -156,5 +190,46 @@ mod tests {
         fs::write(&path, [0xff, 0xfe, 0x00]).unwrap();
 
         assert_eq!(read_text(&path).unwrap_err().code(), "invalid_path");
+    }
+
+    #[test]
+    fn lists_one_level_of_a_folder_without_version_control_internals() {
+        let dir = tempdir().unwrap();
+        fs::create_dir_all(dir.path().join("scripts/deep")).unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        fs::write(dir.path().join("README.md"), "").unwrap();
+        fs::write(dir.path().join(".DS_Store"), "").unwrap();
+
+        let mut listed = list_dir(dir.path()).unwrap();
+        listed.sort_by(|left, right| left.name.cmp(&right.name));
+
+        let summary: Vec<(&str, bool)> = listed
+            .iter()
+            .map(|entry| (entry.name.as_str(), entry.is_dir))
+            .collect();
+        assert_eq!(summary, vec![("README.md", false), ("scripts", true)]);
+    }
+
+    #[test]
+    fn lists_a_symlinked_folder_as_a_linked_folder_under_its_own_path() {
+        let dir = tempdir().unwrap();
+        let source = dir.path().join("source");
+        let parent = dir.path().join("interface");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&parent).unwrap();
+        std::os::unix::fs::symlink(&source, parent.join("ask-sonner")).unwrap();
+        std::os::unix::fs::symlink(dir.path().join("gone"), parent.join("broken")).unwrap();
+
+        let listed = list_dir(&parent).unwrap();
+
+        assert_eq!(
+            listed,
+            vec![FolderEntry {
+                name: "ask-sonner".to_string(),
+                path: parent.join("ask-sonner").to_string_lossy().into_owned(),
+                is_dir: true,
+                is_symlink: true,
+            }]
+        );
     }
 }

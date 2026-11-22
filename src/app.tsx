@@ -24,6 +24,7 @@ import { ExplainView } from "./features/explain/view/explain-view";
 import { EditorPane } from "./features/library/editor-pane";
 import { buildLibraryModel } from "./features/library/library-model";
 import { LibraryPanel } from "./features/library/library-panel";
+import { isWithin } from "./features/library/library-paths";
 import { projectOf } from "./features/library/library-projects";
 import {
   NewSkillDialog,
@@ -76,17 +77,25 @@ export function App() {
   const openProject = useOpenProject();
   const { roots } = index;
   const showProject = openProject.open;
-  const projectShown = openProject.path !== null;
+  const shownProject = openProject.path;
   const followOpenedFile = useCallback(
     (file: FileRow, through: string | null) => {
+      if (shownProject === null) {
+        return;
+      }
+      const openedThroughShownProject =
+        through !== null && isWithin(through, shownProject);
+      if (openedThroughShownProject) {
+        return;
+      }
       // Until home resolves, a file in ~/.claude would pass for a project's.
       const project =
         home === null ? null : projectOf(file, roots, home, through);
-      if (projectShown && project !== null) {
+      if (project !== null) {
         showProject(project);
       }
     },
-    [home, projectShown, roots, showProject]
+    [home, shownProject, roots, showProject]
   );
   const library = useLibraryFile(followOpenedFile);
   const favoriteProjects = useFavoriteProjects();

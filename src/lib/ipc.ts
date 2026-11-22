@@ -29,6 +29,7 @@ import type {
   FileHistory,
   FileLinks,
   FileRow,
+  FolderEntry,
   InstallResult,
   ListFilesArgs,
   PromptHistoryEntry,
@@ -153,6 +154,9 @@ export const trashFile = (fileId: number) =>
 
 export const listFileLinks = (fileId: number) =>
   call<FileLinks>("list_file_links", { fileId });
+
+export const listFolder = (path: string) =>
+  call<FolderEntry[]>("list_folder", { path });
 
 export const fileHistory = (fileId: number) =>
   call<FileHistory>("file_history", { fileId });

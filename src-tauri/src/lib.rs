@@ -95,6 +95,7 @@ pub fn run() {
             commands::files::trash_file,
             commands::files::list_duplicates,
             commands::files::list_file_links,
+            commands::files::list_folder,
             commands::history::file_history,
             commands::history::file_commit_change,
             commands::history::file_working_change,

@@ -67,6 +67,7 @@ function tree({
       selectedAlias={selectedAlias}
       selectedFileId={selectedFileId}
       showAliases={showAliases}
+      showOtherFiles={false}
     />
   );
 }

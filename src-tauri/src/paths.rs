@@ -1,4 +1,5 @@
-use std::path::{Path, PathBuf};
+use std::io::ErrorKind;
+use std::path::{Component, Path, PathBuf};
 
 use crate::db::roots_repo::Root;
 use crate::error::{AppError, AppResult};
@@ -57,6 +58,22 @@ pub fn ensure_openable(path: &Path, resolved: &Path, roots: &[Root]) -> AppResul
         (Ok(()), _) | (_, Ok(())) => Ok(()),
         (Err(err), Err(_)) => Err(err),
     }
+}
+
+// A `..` lets a rooted prefix climb out of the root it names.
+pub fn ensure_listable(path: &Path, roots: &[Root]) -> AppResult<()> {
+    let plain = path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::RootDir | Component::Normal(_)));
+    if !plain {
+        return Err(AppError::InvalidPath(path.display().to_string()));
+    }
+    let resolved = path.canonicalize().map_err(|err| match err.kind() {
+        ErrorKind::NotFound => AppError::NotFound(path.display().to_string()),
+        _ => AppError::InvalidPath(format!("{}: {err}", path.display())),
+    })?;
+    ensure_openable(path, &resolved, roots)
 }
 
 pub fn conflicts_with_existing_root(candidate: &Path, roots: &[Root]) -> Option<String> {
@@ -132,6 +149,41 @@ mod tests {
         let err = ensure_openable(stored, resolved, &roots).unwrap_err();
 
         assert_eq!(err.code(), "outside_roots");
+    }
+
+    #[test]
+    fn lists_a_folder_inside_a_root() {
+        let dir = tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        std::fs::create_dir(base.join("skills")).unwrap();
+        let roots = vec![root(&base.to_string_lossy())];
+
+        assert!(ensure_listable(&base.join("skills"), &roots).is_ok());
+    }
+
+    #[test]
+    fn refuses_a_folder_that_climbs_out_of_its_root() {
+        let dir = tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        let rooted = base.join("root");
+        std::fs::create_dir_all(base.join("private")).unwrap();
+        std::fs::create_dir(&rooted).unwrap();
+        let roots = vec![root(&rooted.to_string_lossy())];
+
+        let err = ensure_listable(&rooted.join("../private"), &roots).unwrap_err();
+
+        assert_eq!(err.code(), "invalid_path");
+    }
+
+    #[test]
+    fn reports_a_folder_deleted_since_it_was_shown_as_not_found() {
+        let dir = tempdir().unwrap();
+        let base = dir.path().canonicalize().unwrap();
+        let roots = vec![root(&base.to_string_lossy())];
+
+        let err = ensure_listable(&base.join("gone"), &roots).unwrap_err();
+
+        assert_eq!(err.code(), "not_found");
     }
 
     #[test]

@@ -57,6 +57,7 @@ function renderTree(files: FileRow[]) {
       selectedAlias={null}
       selectedFileId={null}
       showAliases
+      showOtherFiles={false}
     />
   );
 }

@@ -8,9 +8,9 @@ use crate::db::links_repo::{self, FileLinks};
 use crate::db::roots_repo;
 use crate::error::{AppError, AppResult};
 use crate::events;
-use crate::fsops;
+use crate::fsops::{self, FolderEntry};
 use crate::managed_by::{managed_by, ManagedBy};
-use crate::paths::{canonicalize, ensure_openable};
+use crate::paths::{canonicalize, ensure_listable, ensure_openable};
 use crate::scanner::hash::hash_bytes;
 use crate::scanner::refs;
 use crate::scanner::store::store_content;
@@ -149,4 +149,13 @@ pub fn list_file_links(state: State<'_, AppState>, file_id: i64) -> AppResult<Fi
 #[tauri::command(async)]
 pub fn list_duplicates(state: State<'_, AppState>) -> AppResult<Vec<DuplicateGroup>> {
     state.db.with_conn(files_repo::duplicates)
+}
+
+/// One level only: a recursive listing would read whole repositories.
+#[tauri::command(async)]
+pub fn list_folder(state: State<'_, AppState>, path: String) -> AppResult<Vec<FolderEntry>> {
+    let folder = Path::new(&path);
+    let roots = state.db.with_conn(roots_repo::list_enabled)?;
+    ensure_listable(folder, &roots)?;
+    fsops::list_dir(folder)
 }

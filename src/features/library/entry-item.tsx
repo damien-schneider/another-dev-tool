@@ -28,7 +28,7 @@ import {
 
 export const ICON_CLASS = "size-3.5 shrink-0 text-muted-foreground";
 
-const DIMMED_STYLE = {
+export const DIMMED_STYLE = {
   "--cui-tree-item-trigger-foreground": "var(--muted-foreground)",
 } as const;
 
@@ -47,7 +47,7 @@ function linkLabel(entry: LibraryEntry, home: string | null): string | null {
   return null;
 }
 
-function StatusMark({
+export function StatusMark({
   id,
   label,
   icon,

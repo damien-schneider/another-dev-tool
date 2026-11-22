@@ -33,6 +33,7 @@ import { ProjectSwitcher } from "@/features/projects/project-switcher";
 import type { UseScan } from "@/features/scan/use-scan";
 import { useHomeDirectory } from "@/lib/home-dir";
 import type { FileRow } from "@/lib/ipc-types";
+import { useStoredFlag } from "@/lib/stored-flag";
 import { IconButton } from "@/shared/components/icon-button";
 
 import { buildLibraryModel, filterFiles } from "./library-model";
@@ -48,19 +49,12 @@ import type { LibraryIndex } from "./use-library-index";
 const MODE_STORAGE_KEY = "another-dev-tool.library-mode";
 const SUB_PROJECTS_STORAGE_KEY = "another-dev-tool.library-sub-projects";
 const ALIASES_STORAGE_KEY = "another-dev-tool.library-links";
+const OTHER_FILES_STORAGE_KEY = "another-dev-tool.library-other-files";
 
 function readStoredMode(): LibraryTreeMode {
   return window.localStorage.getItem(MODE_STORAGE_KEY) === "folders"
     ? "folders"
     : "grouped";
-}
-
-function readStoredShowSubProjects(): boolean {
-  return window.localStorage.getItem(SUB_PROJECTS_STORAGE_KEY) !== "hidden";
-}
-
-function readStoredShowAliases(): boolean {
-  return window.localStorage.getItem(ALIASES_STORAGE_KEY) !== "hidden";
 }
 
 export interface LibraryPanelProps {
@@ -165,10 +159,18 @@ export function LibraryPanel({
 }: LibraryPanelProps) {
   const [search, setSearch] = useState("");
   const [mode, setMode] = useState<LibraryTreeMode>(readStoredMode);
-  const [showSubProjects, setShowSubProjects] = useState(
-    readStoredShowSubProjects
+  const [showSubProjects, setShowSubProjects] = useStoredFlag(
+    SUB_PROJECTS_STORAGE_KEY,
+    true
   );
-  const [showAliases, setShowAliases] = useState(readStoredShowAliases);
+  const [showAliases, setShowAliases] = useStoredFlag(
+    ALIASES_STORAGE_KEY,
+    true
+  );
+  const [showOtherFiles, setShowOtherFiles] = useStoredFlag(
+    OTHER_FILES_STORAGE_KEY,
+    false
+  );
   const home = useHomeDirectory();
   const listsLinks = showAliases && mode === "grouped";
   const scoped = useMemo(
@@ -213,6 +215,7 @@ export function LibraryPanel({
       selectedAlias={selectedAlias}
       selectedFileId={selectedFileId}
       showAliases={showAliases}
+      showOtherFiles={showOtherFiles}
     />
   );
   if (index.error) {
@@ -305,30 +308,25 @@ export function LibraryPanel({
                 <DropdownMenuLabel>Show</DropdownMenuLabel>
                 <DropdownMenuCheckboxItem
                   checked={showSubProjects}
-                  onCheckedChange={(next: boolean) => {
-                    setShowSubProjects(next);
-                    window.localStorage.setItem(
-                      SUB_PROJECTS_STORAGE_KEY,
-                      next ? "shown" : "hidden"
-                    );
-                  }}
+                  onCheckedChange={setShowSubProjects}
                 >
                   Monorepo sub-projects
                 </DropdownMenuCheckboxItem>
                 {mode === "grouped" ? (
                   <DropdownMenuCheckboxItem
                     checked={showAliases}
-                    onCheckedChange={(next: boolean) => {
-                      setShowAliases(next);
-                      window.localStorage.setItem(
-                        ALIASES_STORAGE_KEY,
-                        next ? "shown" : "hidden"
-                      );
-                    }}
+                    onCheckedChange={setShowAliases}
                   >
                     Links
                   </DropdownMenuCheckboxItem>
-                ) : null}
+                ) : (
+                  <DropdownMenuCheckboxItem
+                    checked={showOtherFiles}
+                    onCheckedChange={setShowOtherFiles}
+                  >
+                    Other files
+                  </DropdownMenuCheckboxItem>
+                )}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>

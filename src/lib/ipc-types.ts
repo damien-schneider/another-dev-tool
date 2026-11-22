@@ -108,6 +108,15 @@ export interface FileLinks {
   incoming: FileRow[];
 }
 
+/** Mirrors fsops::FolderEntry */
+export interface FolderEntry {
+  name: string;
+  /** Reached through the listed folder, never resolved through its symlinks */
+  path: string;
+  isDir: boolean;
+  isSymlink: boolean;
+}
+
 /** Mirrors db::files_repo::DuplicateGroup */
 export interface DuplicateGroup {
   hash: string;

@@ -58,6 +58,7 @@ function folderTree(selectedFileId: number | null) {
       selectedAlias={null}
       selectedFileId={selectedFileId}
       showAliases
+      showOtherFiles={false}
     />
   );
 }
@@ -98,6 +99,7 @@ describe("LibraryTree grouped by project", () => {
         selectedAlias={null}
         selectedFileId={null}
         showAliases
+        showOtherFiles={false}
       />
     );
 
@@ -134,6 +136,7 @@ describe("LibraryTree grouped by project", () => {
         selectedAlias={null}
         selectedFileId={null}
         showAliases
+        showOtherFiles={false}
       />
     );
 
@@ -174,6 +177,7 @@ describe("LibraryTree rows as chat references", () => {
         selectedAlias={null}
         selectedFileId={null}
         showAliases
+        showOtherFiles={false}
       />
     );
   }

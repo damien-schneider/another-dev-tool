@@ -1,27 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import type { FileRow, Root } from "../ipc-types";
+import type { FileRow } from "../ipc-types";
 import {
   buildTree,
   fileIdOf,
   fileNodeId,
-  folderIdsOf,
+  folderNodeId,
   TREE_ROOT_ID,
+  type TreeBase,
 } from "../tree";
 
-const root: Root = {
-  id: 1,
-  path: "/Users/me/GitHub",
-  enabled: true,
-  addedAt: 0,
-};
+const GITHUB: TreeBase = { path: "/Users/me/GitHub", name: "GitHub" };
+const CLAUDE: TreeBase = { path: "/Users/me/.claude", name: ".claude" };
 
-function file(id: number, relPath: string, rootId = 1): FileRow {
+function file(id: number, path: string): FileRow {
   return {
     id,
-    rootId,
-    path: `/Users/me/GitHub/${relPath}`,
-    relPath,
+    rootId: 1,
+    path,
+    relPath: path,
     kind: "claude-md",
     name: null,
     description: null,
@@ -39,9 +36,16 @@ function file(id: number, relPath: string, rootId = 1): FileRow {
   };
 }
 
+function inGitHub(id: number, relPath: string): FileRow {
+  return file(id, `${GITHUB.path}/${relPath}`);
+}
+
 describe("buildTree", () => {
-  it("nests files under their relative path segments", () => {
-    const index = buildTree([file(1, "app/api/CLAUDE.md")], [root]);
+  it("nests files under the folders between their base and them", () => {
+    const { index } = buildTree(
+      [inGitHub(1, "app/api/CLAUDE.md")],
+      () => GITHUB
+    );
 
     const rootBranch = index[TREE_ROOT_ID]?.childIds[0] as string;
     expect(index[rootBranch]?.name).toBe("GitHub");
@@ -54,9 +58,9 @@ describe("buildTree", () => {
   });
 
   it("shares folder nodes between siblings", () => {
-    const index = buildTree(
-      [file(1, "app/CLAUDE.md"), file(2, "app/AGENTS.md")],
-      [root]
+    const { index } = buildTree(
+      [inGitHub(1, "app/CLAUDE.md"), inGitHub(2, "app/AGENTS.md")],
+      () => GITHUB
     );
 
     const folders = Object.values(index).filter(
@@ -67,9 +71,9 @@ describe("buildTree", () => {
   });
 
   it("sorts folders before files, then alphabetically", () => {
-    const index = buildTree(
-      [file(1, "z.md"), file(2, "a.md"), file(3, "sub/nested.md")],
-      [root]
+    const { index } = buildTree(
+      [inGitHub(1, "z.md"), inGitHub(2, "a.md"), inGitHub(3, "sub/nested.md")],
+      () => GITHUB
     );
 
     const branch = index[TREE_ROOT_ID]?.childIds[0] as string;
@@ -77,41 +81,44 @@ describe("buildTree", () => {
     expect(names).toEqual(["sub", "a.md", "z.md"]);
   });
 
-  it("keeps one branch per root", () => {
-    const other: Root = {
-      id: 2,
-      path: "/Users/me/.claude",
-      enabled: true,
-      addedAt: 0,
-    };
-    const index = buildTree(
-      [file(1, "CLAUDE.md"), file(2, "CLAUDE.md", 2)],
-      [root, other]
+  it("keeps one branch per base", () => {
+    const personal = file(2, `${CLAUDE.path}/CLAUDE.md`);
+    const { index } = buildTree([inGitHub(1, "CLAUDE.md"), personal], (row) =>
+      row === personal ? CLAUDE : GITHUB
     );
 
     const names = index[TREE_ROOT_ID]?.childIds.map((id) => index[id]?.name);
     expect(names).toEqual([".claude", "GitHub"]);
   });
 
-  it("drops files whose root is gone", () => {
-    const index = buildTree([file(1, "CLAUDE.md", 99)], [root]);
+  it("drops files without a base", () => {
+    const { index } = buildTree([inGitHub(1, "CLAUDE.md")], () => null);
+
+    expect(index[TREE_ROOT_ID]?.childIds).toEqual([]);
+  });
+
+  it("drops a file outside its base, even one sharing the base's name", () => {
+    const { index } = buildTree([inGitHub(1, "CLAUDE.md")], () => ({
+      path: "/Users/me/Git",
+      name: "Git",
+    }));
 
     expect(index[TREE_ROOT_ID]?.childIds).toEqual([]);
   });
 
   it("returns a lone root node for an empty index", () => {
-    const index = buildTree([], [root]);
+    const { index } = buildTree([], () => GITHUB);
 
     expect(Object.keys(index)).toEqual([TREE_ROOT_ID]);
   });
-});
 
-describe("folderIdsOf", () => {
-  it("lists every branch that has to open to reach a file, root first", () => {
-    const nested = file(1, "app/api/CLAUDE.md");
-    const index = buildTree([nested], [root]);
+  it("lists every branch that has to open to reach a file, base first", () => {
+    const { index, locations } = buildTree(
+      [inGitHub(1, "app/api/CLAUDE.md")],
+      () => GITHUB
+    );
 
-    const names = folderIdsOf(nested).map((id) => index[id]?.name);
+    const names = locations.get(fileNodeId(1))?.map((id) => index[id]?.name);
     expect(names).toEqual(["GitHub", "app", "api"]);
   });
 });
@@ -122,6 +129,6 @@ describe("fileIdOf", () => {
   });
 
   it("returns null for a folder node", () => {
-    expect(fileIdOf("dir:1:app")).toBeNull();
+    expect(fileIdOf(folderNodeId("/Users/me/GitHub/app"))).toBeNull();
   });
 });

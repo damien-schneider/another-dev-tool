@@ -1,4 +1,4 @@
-import type { FileRow, Root } from "./ipc-types";
+import type { FileRow } from "./ipc-types";
 
 export const TREE_ROOT_ID = "root";
 
@@ -12,6 +12,17 @@ export interface TreeNode {
 }
 
 export type TreeIndex = Record<string, TreeNode>;
+
+export interface TreeBase {
+  path: string;
+  name: string;
+}
+
+export interface FolderTree {
+  index: TreeIndex;
+  /** Outermost first. */
+  locations: Map<string, string[]>;
+}
 
 const SEPARATOR_PATTERN = /[\\/]+/;
 
@@ -28,18 +39,19 @@ export function fileIdOf(nodeId: string): number | null {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-function folderNodeId(rootId: number, segments: string[]): string {
-  return `dir:${rootId}:${segments.join("/")}`;
+export function folderNodeId(path: string): string {
+  return `dir:${path}`;
 }
 
-/** The branches above a file, root first: what has to open to show it. */
-export function folderIdsOf(
-  file: Pick<FileRow, "rootId" | "relPath">
-): string[] {
-  const segments = file.relPath.split(SEPARATOR_PATTERN).filter(Boolean);
-  return segments.map((_, depth) =>
-    folderNodeId(file.rootId, segments.slice(0, depth))
-  );
+function folderNode(path: string, name: string): TreeNode {
+  return {
+    id: folderNodeId(path),
+    name,
+    path,
+    isFolder: true,
+    file: null,
+    childIds: [],
+  };
 }
 
 function ensureNode(index: TreeIndex, node: TreeNode): TreeNode {
@@ -55,11 +67,6 @@ function attach(parent: TreeNode, childId: string) {
   if (!parent.childIds.includes(childId)) {
     parent.childIds.push(childId);
   }
-}
-
-function rootLabel(root: Root): string {
-  const segments = root.path.split(SEPARATOR_PATTERN).filter(Boolean);
-  return segments.at(-1) ?? root.path;
 }
 
 function sortChildren(index: TreeIndex) {
@@ -78,66 +85,45 @@ function sortChildren(index: TreeIndex) {
   }
 }
 
-/** One folder branch per root, then `relPath` segments; leaves carry their FileRow. */
-export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
-  const index: TreeIndex = {
-    [TREE_ROOT_ID]: {
-      id: TREE_ROOT_ID,
-      name: "",
-      path: "",
-      isFolder: true,
-      file: null,
-      childIds: [],
-    },
+export function buildTree(
+  files: readonly FileRow[],
+  baseOf: (file: FileRow) => TreeBase | null
+): FolderTree {
+  const top: TreeNode = {
+    id: TREE_ROOT_ID,
+    name: "",
+    path: "",
+    isFolder: true,
+    file: null,
+    childIds: [],
   };
-
-  const rootsById = new Map(roots.map((root) => [root.id, root]));
-  const usedRootIds = new Set(files.map((file) => file.rootId));
-
-  for (const rootId of usedRootIds) {
-    const root = rootsById.get(rootId);
-    if (!root) {
-      continue;
-    }
-    const node = ensureNode(index, {
-      id: folderNodeId(rootId, []),
-      name: rootLabel(root),
-      path: root.path,
-      isFolder: true,
-      file: null,
-      childIds: [],
-    });
-    attach(index[TREE_ROOT_ID] as TreeNode, node.id);
-  }
+  const index: TreeIndex = { [TREE_ROOT_ID]: top };
+  const locations = new Map<string, string[]>();
 
   for (const file of files) {
-    const root = rootsById.get(file.rootId);
-    if (!root) {
+    const base = baseOf(file);
+    if (!(base?.path && file.path.startsWith(`${base.path}/`))) {
       continue;
     }
-    const segments = file.relPath.split(SEPARATOR_PATTERN).filter(Boolean);
+    const segments = file.path
+      .slice(base.path.length + 1)
+      .split(SEPARATOR_PATTERN)
+      .filter(Boolean);
     const fileName = segments.pop();
     if (!fileName) {
       continue;
     }
 
-    let parent = index[folderNodeId(file.rootId, [])];
-    if (!parent) {
-      continue;
-    }
-
-    const walked: string[] = [];
+    let parent = ensureNode(index, folderNode(base.path, base.name));
+    attach(top, parent.id);
+    const branchIds = [parent.id];
     for (const segment of segments) {
-      walked.push(segment);
-      const folder = ensureNode(index, {
-        id: folderNodeId(file.rootId, walked),
-        name: segment,
-        path: `${root.path}/${walked.join("/")}`,
-        isFolder: true,
-        file: null,
-        childIds: [],
-      });
+      const folder = ensureNode(
+        index,
+        folderNode(`${parent.path}/${segment}`, segment)
+      );
       attach(parent, folder.id);
+      branchIds.push(folder.id);
       parent = folder;
     }
 
@@ -150,10 +136,11 @@ export function buildTree(files: FileRow[], roots: Root[]): TreeIndex {
       childIds: [],
     });
     attach(parent, leaf.id);
+    locations.set(leaf.id, branchIds);
   }
 
   sortChildren(index);
-  return index;
+  return { index, locations };
 }
 
 export function folderIds(index: TreeIndex): string[] {
