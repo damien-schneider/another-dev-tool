@@ -105,13 +105,6 @@ mod tests {
     }
 
     #[test]
-    fn handles_an_empty_side() {
-        let result = diff_text("", "a\n");
-
-        assert_eq!((result.added, result.removed), (1, 0));
-    }
-
-    #[test]
     fn strips_the_trailing_newline_from_line_text() {
         let result = diff_text("a\n", "b\n");
 

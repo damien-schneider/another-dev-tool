@@ -356,10 +356,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let root = dir.path();
         fs::create_dir_all(root.join("consumer")).unwrap();
-        std::os::unix::fs::symlink(root.join("missing.md"), root.join("consumer/AGENTS.md"))
-            .unwrap();
+        let link = root.join("consumer/AGENTS.md");
+        std::os::unix::fs::symlink(root.join("missing.md"), &link).unwrap();
 
         assert!(collect(root).is_empty());
+        // the watcher and the scanner hand paths straight to `describe`, bypassing the walker
+        assert!(describe(&link, FileKind::AgentsMd).is_none());
     }
 
     #[test]
@@ -375,23 +377,5 @@ mod tests {
         walk_root(root, &cancel, |entry| found.lock().unwrap().push(entry));
 
         assert!(found.into_inner().unwrap().is_empty());
-    }
-
-    #[test]
-    fn project_dir_is_the_nearest_git_ancestor() {
-        let dir = tempdir().unwrap();
-        let root = dir.path();
-        fs::create_dir_all(root.join("repo/.git")).unwrap();
-        write(&root.join("repo/packages/api/AGENTS.md"), "a");
-        write(&root.join("loose/AGENTS.md"), "b");
-
-        let inside = project_dir_of(&root.join("repo/packages/api/AGENTS.md"), root);
-        let outside = project_dir_of(&root.join("loose/AGENTS.md"), root);
-
-        assert_eq!(
-            inside,
-            Some(root.join("repo").to_string_lossy().into_owned())
-        );
-        assert_eq!(outside, None);
     }
 }

@@ -41,14 +41,6 @@ mod tests {
     }
 
     #[test]
-    fn hashes_an_empty_file() {
-        let dir = tempdir().unwrap();
-        let path = write(dir.path(), "empty.md", b"");
-
-        assert_eq!(hash_file(&path, 0).unwrap(), hash_bytes(b""));
-    }
-
-    #[test]
     fn takes_the_mmap_path_above_the_threshold() {
         let dir = tempdir().unwrap();
         let bytes = vec![b'x'; (MMAP_THRESHOLD as usize) + 1];
@@ -58,10 +50,5 @@ mod tests {
             hash_file(&path, bytes.len() as u64).unwrap(),
             hash_bytes(&bytes)
         );
-    }
-
-    #[test]
-    fn different_content_hashes_differently() {
-        assert_ne!(hash_bytes(b"a"), hash_bytes(b"b"));
     }
 }

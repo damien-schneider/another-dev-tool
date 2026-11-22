@@ -1,4 +1,4 @@
-import { type FileKind, SCAN_TARGETS } from "@/lib/agent-files/scan-targets";
+import { type FileKind, isFileKind } from "@/lib/agent-files/scan-targets";
 
 export interface AgentReference {
   path: string;
@@ -9,9 +9,7 @@ export interface AgentReference {
 const REFERENCE_TYPE = "application/x-another-dev-tool-reference";
 
 function isReferenceKind(value: unknown): value is AgentReference["kind"] {
-  return (
-    value === "folder" || SCAN_TARGETS.some((target) => target.kind === value)
-  );
+  return value === "folder" || isFileKind(value);
 }
 
 function isReference(value: unknown): value is AgentReference {

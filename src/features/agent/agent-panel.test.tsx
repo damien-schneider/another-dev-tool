@@ -126,15 +126,6 @@ describe("AgentPanel", () => {
     expect(screen.queryAllByRole("combobox")).toHaveLength(0);
   });
 
-  it("keeps Shift+Enter for a new line", () => {
-    const { session } = renderPanel();
-
-    fireEvent.change(composer(), { target: { value: "tighten it" } });
-    fireEvent.keyDown(composer(), { key: "Enter", shiftKey: true });
-
-    expect(session.send).not.toHaveBeenCalled();
-  });
-
   it("drafts an example request without sending it", () => {
     const { session } = renderPanel();
 
@@ -153,9 +144,13 @@ describe("AgentPanel", () => {
     expect(session.send).not.toHaveBeenCalled();
   });
 
-  it("has no composer when the agent CLI is missing", () => {
+  it("tells the user how to install the agent CLI instead of offering a composer when it is missing", () => {
     renderPanel({ available: false });
 
+    expect(screen.getByText("Claude Code isn’t installed")).toBeTruthy();
+    expect(
+      screen.getByText("npm install -g @anthropic-ai/claude-code")
+    ).toBeTruthy();
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 

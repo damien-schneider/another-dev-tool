@@ -118,8 +118,11 @@ mod tests {
 
     #[test]
     fn only_the_tail_of_a_long_stderr_is_kept() {
-        let noise = "x".repeat(STDERR_TAIL + 50);
+        let noise = format!("{}Error: out of memory", "x".repeat(1_000));
 
-        assert_eq!(crash_reason(&noise).len(), STDERR_TAIL);
+        let reason = crash_reason(&noise);
+
+        assert_eq!(reason.chars().count(), 600);
+        assert!(reason.ends_with("Error: out of memory"));
     }
 }

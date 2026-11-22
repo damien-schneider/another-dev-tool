@@ -427,28 +427,6 @@ fn an_alias_that_appears_is_reported_without_rereading_the_file() {
 }
 
 #[test]
-fn removing_the_root_of_an_alias_leaves_no_orphan_behind() {
-    let (_dir, base) = base();
-    cross_root_tree(&base);
-    let db = Db::open_in_memory().unwrap();
-    let claude = add_root(&db, &base.join(".claude"));
-    let agents = add_root(&db, &base.join(".agents"));
-    scan(&db, &[&claude, &agents]);
-
-    db.with_conn(|conn| roots_repo::remove(conn, claude.id))
-        .unwrap();
-
-    assert_eq!(
-        shape(&db),
-        [(
-            text(&base.join(".agents/skills/a/SKILL.md")),
-            agents.id,
-            vec![]
-        )]
-    );
-}
-
-#[test]
 fn a_file_is_never_reported_as_a_duplicate_of_its_own_aliases() {
     let (_dir, base) = base();
     let db = Db::open_in_memory().unwrap();

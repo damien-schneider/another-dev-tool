@@ -35,6 +35,12 @@ const INTERFACE: AgentReference = {
   kind: "folder",
 };
 
+const CRAFT: AgentReference = {
+  path: "/skills/craft/SKILL.md",
+  label: "craft",
+  kind: "skill",
+};
+
 function draggedRow(reference: AgentReference) {
   const data = new Map<string, string>();
   const types: string[] = [];
@@ -104,22 +110,24 @@ function Panel({ initial = [] }: { initial?: AgentReference[] }) {
 }
 
 describe("composer references", () => {
-  it("takes a library row dropped on the composer as a reference, until removed", () => {
-    render(<Panel />);
-    const composer = screen.getByRole("textbox");
-    const dataTransfer = draggedRow(INTERFACE);
+  it.each([INTERFACE, CRAFT])(
+    "takes a library $kind dropped on the composer as a reference, until removed",
+    (reference) => {
+      render(<Panel />);
+      const composer = screen.getByRole("textbox");
+      const dataTransfer = draggedRow(reference);
 
-    fireEvent.dragEnter(composer, { dataTransfer });
-    fireEvent.dragOver(composer, { dataTransfer });
-    fireEvent.drop(composer, { dataTransfer });
+      fireEvent.dragEnter(composer, { dataTransfer });
+      fireEvent.dragOver(composer, { dataTransfer });
+      fireEvent.drop(composer, { dataTransfer });
 
-    const chip = screen.getByRole("button", { name: "Remove interface" });
-    expect(chip.title).toBe(INTERFACE.path);
-    fireEvent.click(chip);
-    expect(
-      screen.queryByRole("button", { name: "Remove interface" })
-    ).toBeNull();
-  });
+      const remove = `Remove ${reference.label}`;
+      const chip = screen.getByRole("button", { name: remove });
+      expect(chip.title).toBe(reference.path);
+      fireEvent.click(chip);
+      expect(screen.queryByRole("button", { name: remove })).toBeNull();
+    }
+  );
 
   it("keeps the composer open while it carries a reference or leaves the file out", () => {
     render(<Panel />);

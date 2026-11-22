@@ -754,11 +754,18 @@ mod tests {
     #[test]
     fn a_missing_root_directory_is_skipped() {
         let (db, dir, root) = setup();
+        write(&dir.path().join("CLAUDE.md"), "# claude");
+        scan(&db, &root);
         drop(dir);
 
         let outcome = scan(&db, &root);
 
         assert_eq!(outcome.stats.seen, 0);
+        // an unmounted or renamed root keeps its rows until it is back or removed
+        let files = db
+            .with_conn(|conn| files_repo::list(conn, &FileFilter::default()))
+            .unwrap();
+        assert_eq!(files.len(), 1);
     }
 
     #[test]

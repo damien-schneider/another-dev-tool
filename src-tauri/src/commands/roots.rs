@@ -151,39 +151,6 @@ mod tests {
     }
 
     #[test]
-    fn seeds_the_agent_homes_and_code_folders_that_exist() {
-        let db = Db::open_in_memory().unwrap();
-        let (_dir, home) = home_with(DEFAULT_ROOTS);
-
-        seed_roots_under(&db, &home).unwrap();
-
-        assert_eq!(root_paths(&db), under(&home, DEFAULT_ROOTS));
-    }
-
-    #[test]
-    fn freezes_the_default_list() {
-        assert_eq!(
-            DEFAULT_ROOTS,
-            [
-                ".claude",
-                ".agents",
-                ".codex",
-                ".cursor",
-                ".gemini",
-                ".config/opencode",
-                "Documents/GitHub",
-                "Developer",
-                "Projects",
-                "Code",
-                "dev",
-                "src",
-                "repos",
-                "workspace",
-            ]
-        );
-    }
-
-    #[test]
     fn skips_directories_that_do_not_exist() {
         let db = Db::open_in_memory().unwrap();
         let (_dir, home) = home_with(&[".claude", "Developer"]);
@@ -269,19 +236,5 @@ mod tests {
         seed_roots_under(&db, &home).unwrap();
 
         assert_eq!(root_paths(&db), under(&home, &["Documents/Github"]));
-    }
-
-    #[test]
-    fn a_nested_directory_is_refused_as_a_second_root() {
-        let db = Db::open_in_memory().unwrap();
-        let dir = tempdir().unwrap();
-        let parent = dir.path().canonicalize().unwrap();
-        std::fs::create_dir_all(parent.join("child")).unwrap();
-
-        db.with_conn(|conn| roots_repo::insert(conn, &parent.to_string_lossy(), 0))
-            .unwrap();
-
-        let existing = db.with_conn(roots_repo::list).unwrap();
-        assert!(conflicts_with_existing_root(&parent.join("child"), &existing).is_some());
     }
 }

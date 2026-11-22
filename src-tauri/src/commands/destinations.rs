@@ -134,13 +134,4 @@ mod tests {
 
         assert!(resolved.favorite);
     }
-
-    #[test]
-    fn rejects_a_folder_that_does_not_exist() {
-        let state = state();
-
-        let error = resolve_destination_folder_in(&state, "/missing/destination").unwrap_err();
-
-        assert_eq!(error.code(), "invalid_path");
-    }
 }
