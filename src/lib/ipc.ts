@@ -1,11 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AgentConversationSummary,
+  AgentListing,
+  AgentPrepared,
   AgentPromptImage,
+  AgentRun,
   AgentRunSettings,
+  AgentSignIn,
   AgentStarted,
   AgentStatus,
   AgentStoredMessage,
+  AskConversationSummary,
 } from "./agent-ipc-types";
 import type {
   ExplainLevel,
@@ -42,6 +47,7 @@ import type {
   WriteResult,
 } from "./ipc-types";
 import type { PatternsState } from "./patterns-ipc-types";
+import type { TextSelection } from "./text-selection";
 
 export class IpcError extends Error {
   readonly code: AppErrorCode;
@@ -177,6 +183,14 @@ export const fileWorkingChange = (fileId: number) =>
 
 export const agentStatus = () => call<AgentStatus>("agent_status");
 
+export const agentCatalog = () => call<AgentListing[]>("agent_catalog");
+
+export const agentPrepare = (agentId: string) =>
+  call<AgentPrepared>("agent_prepare", { agentId });
+
+export const agentSignIn = (agentId: string, methodId: string) =>
+  call<AgentSignIn>("agent_sign_in", { agentId, methodId });
+
 export const agentSend = (request: {
   fileId: number;
   conversationId: string | null;
@@ -184,7 +198,8 @@ export const agentSend = (request: {
   prompt: string;
   images: AgentPromptImage[];
   references: string[];
-  settings: AgentRunSettings;
+  selection: TextSelection | null;
+  agent: AgentRun;
 }) =>
   call<AgentStarted>("agent_send", {
     fileId: request.fileId,
@@ -202,15 +217,16 @@ export const agentSend = (request: {
         })
       ),
       references: request.references,
+      selection: request.selection,
     },
-    settings: request.settings,
+    agent: request.agent,
   });
 
-export const agentConversations = (fileId: number) =>
-  call<AgentConversationSummary[]>("agent_conversations", { fileId });
+export const agentConversations = () =>
+  call<AskConversationSummary[]>("agent_conversations");
 
-export const agentConversation = (fileId: number, conversationId: string) =>
-  call<AgentStoredMessage[]>("agent_conversation", { fileId, conversationId });
+export const agentConversation = (conversationId: string) =>
+  call<AgentStoredMessage[]>("agent_conversation", { conversationId });
 
 export const agentCancel = () => call<null>("agent_cancel");
 

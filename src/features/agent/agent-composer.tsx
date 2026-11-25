@@ -22,15 +22,17 @@ import {
 } from "@ctrl-ui/react/ui/dropzone";
 import { ArrowUp, ImagePlus } from "lucide-react";
 import { type RefObject, useState } from "react";
-import type { AgentRunSettings } from "@/lib/agent-ipc-types";
 import type { FileRow } from "@/lib/ipc-types";
+import type { TextSelection } from "@/lib/text-selection";
 
 import { AGENT_IMAGE_POLICY, agentImage } from "./agent-images";
+import { AgentConfigPicker } from "./agent-picker/agent-config-picker";
+import type { AgentChoice } from "./agent-picker/use-agent-choice";
 import type { AgentReference } from "./agent-references";
-import { AgentSettingsPicker } from "./agent-settings";
 import {
   ComposerFile,
   ComposerReferences,
+  ComposerSelection,
   useReferenceDrop,
 } from "./composer-references";
 import type { AgentRequest } from "./use-agent-session";
@@ -43,13 +45,14 @@ interface AgentComposerProps {
   onSend: (request: AgentRequest) => Promise<void>;
   onStop: () => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  settings: AgentRunSettings;
-  onSettingsChange: (settings: AgentRunSettings) => void;
+  agent: AgentChoice;
   references: readonly AgentReference[];
   onAddReference: (reference: AgentReference) => void;
   onRemoveReference: (path: string) => void;
   includesFile: boolean;
   onIncludeFileChange: (included: boolean) => void;
+  selection: TextSelection | null;
+  onRemoveSelection: () => void;
 }
 
 async function readImages(files: readonly File[]) {
@@ -109,13 +112,14 @@ function AgentComposerForm({
   onSend,
   onStop,
   textareaRef,
-  settings,
-  onSettingsChange,
+  agent,
   references,
   onAddReference,
   onRemoveReference,
   includesFile,
   onIncludeFileChange,
+  selection,
+  onRemoveSelection,
 }: AgentComposerProps) {
   const dropzone = useDropzoneContext();
   const [unreadable, setUnreadable] = useState<readonly File[]>([]);
@@ -123,8 +127,16 @@ function AgentComposerForm({
     onAddReference(reference);
     textareaRef.current?.focus();
   });
-  const referenceChips = (
-    <ComposerReferences onRemove={onRemoveReference} references={references} />
+  const attached = (
+    <>
+      {selection ? (
+        <ComposerSelection onRemove={onRemoveSelection} selection={selection} />
+      ) : null}
+      <ComposerReferences
+        onRemove={onRemoveReference}
+        references={references}
+      />
+    </>
   );
 
   return (
@@ -139,48 +151,53 @@ function AgentComposerForm({
           }
           clear();
           dropzone.reset();
-          await onSend({ prompt: asked, images: read.images });
+          await onSend({ prompt: asked, images: read.images, selection });
         }}
         onValueChange={onValueChange}
         state={running ? "submitting" : "idle"}
         value={value}
       >
-        <HoldOpen held={references.length > 0 || !includesFile} />
+        <HoldOpen
+          held={references.length > 0 || !includesFile || selection !== null}
+        />
         <ChatComposerShell {...referenceDrop}>
           <ChatComposerHeader className="flex-wrap gap-1">
-            {!includesFile && referenceChips}
+            {!includesFile && attached}
             <ComposerFile
               file={file}
               included={includesFile}
               onIncludedChange={onIncludeFileChange}
             />
-            {includesFile ? referenceChips : null}
+            {includesFile ? attached : null}
           </ChatComposerHeader>
           <ComposerImages unreadable={unreadable} />
           <ChatComposerTextarea
             aria-label={
-              includesFile ? "Ask for a change to this file" : "Ask Claude"
+              includesFile
+                ? "Ask for a change to this file"
+                : `Ask ${agent.name}`
             }
-            placeholder={includesFile ? "Ask for a change…" : "Ask Claude…"}
+            placeholder={
+              includesFile ? "Ask for a change…" : `Ask ${agent.name}…`
+            }
             ref={textareaRef}
           />
           <ChatComposerToolbar>
             <ChatComposerTools>
-              <Button
-                aria-label="Add images"
-                disabled={dropzone.disabled || dropzone.isProcessing}
-                iconOnly
-                onClick={dropzone.open}
-                size="xs"
-                variant="ghost"
-              >
-                <ImagePlus />
-              </Button>
+              {dropzone.disabled ? null : (
+                <Button
+                  aria-label="Add images"
+                  disabled={dropzone.isProcessing}
+                  iconOnly
+                  onClick={dropzone.open}
+                  size="xs"
+                  variant="ghost"
+                >
+                  <ImagePlus />
+                </Button>
+              )}
             </ChatComposerTools>
-            <AgentSettingsPicker
-              onSettingsChange={onSettingsChange}
-              settings={settings}
-            />
+            <AgentConfigPicker choice={agent} />
             <ChatComposerSubmit
               aria-label="Send"
               iconOnly
@@ -199,8 +216,12 @@ function AgentComposerForm({
 }
 
 export function AgentComposer(props: AgentComposerProps) {
+  const { preparing } = props.agent;
   return (
-    <Dropzone policy={AGENT_IMAGE_POLICY}>
+    <Dropzone
+      disabled={preparing.state === "ready" && !preparing.prepared.images}
+      policy={AGENT_IMAGE_POLICY}
+    >
       <DropzoneInput aria-label="Images to send" />
       <AgentComposerForm {...props} />
     </Dropzone>

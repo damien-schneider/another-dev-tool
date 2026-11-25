@@ -13,19 +13,20 @@ import {
   formatRelativeTime,
   useMinuteClock,
 } from "@/features/prompts/relative-time";
+import type { AgentConversationSummary } from "@/lib/agent-ipc-types";
 import { IconButton } from "@/shared/components/icon-button";
-
-import type { UseAgentSession } from "./use-agent-session";
 
 export function ConversationHistory({
   heading,
   session,
 }: {
   heading: string;
-  session: Pick<
-    UseAgentSession,
-    "conversations" | "conversationId" | "openConversation" | "newConversation"
-  >;
+  session: {
+    conversations: readonly AgentConversationSummary[];
+    conversationId: string | null;
+    openConversation: (conversationId: string) => void;
+    newConversation: () => void;
+  };
 }) {
   const now = useMinuteClock();
   const { conversations, conversationId } = session;

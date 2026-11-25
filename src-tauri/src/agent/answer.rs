@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::settings::{Effort, Model, RunSettings};
 use super::stream::{PartKind, StreamEvent};
 
 const OUTPUT_CHARS: usize = 4000;
@@ -25,6 +24,8 @@ pub enum Part {
     Tool {
         id: String,
         name: String,
+        #[serde(default)]
+        title: Option<String>,
         input: Option<Value>,
         state: ToolState,
         output: Option<String>,
@@ -49,13 +50,21 @@ pub enum ToolState {
     Error,
 }
 
+/// What the user asked for, in the words the picker showed them; `model` is
+/// what actually answered, when the agent reports it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AnswerMeta {
     pub model: Option<String>,
-    pub requested_model: Model,
-    pub effort: Effort,
+    pub requested_model: String,
+    pub effort: Option<String>,
     pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Requested {
+    pub model: String,
+    pub effort: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,11 +88,11 @@ impl Answer {
         &self.parts
     }
 
-    pub fn meta(&self, settings: RunSettings) -> AnswerMeta {
+    pub fn meta(&self, requested: Requested) -> AnswerMeta {
         AnswerMeta {
             model: self.model.clone(),
-            requested_model: settings.model,
-            effort: settings.effort,
+            requested_model: requested.model,
+            effort: requested.effort,
             duration_ms: self.duration_ms,
         }
     }
@@ -99,6 +108,9 @@ impl Answer {
             StreamEvent::PartStop => self.stop(now).into_iter().collect(),
             StreamEvent::ToolInput { id, input } => {
                 self.set_input(&id, input).into_iter().collect()
+            }
+            StreamEvent::ToolTitle { id, title } => {
+                self.set_title(&id, title).into_iter().collect()
             }
             StreamEvent::ToolResult {
                 id,
@@ -128,11 +140,12 @@ impl Answer {
                 text: String::new(),
                 duration_ms: None,
             },
-            PartKind::Tool { id, name } => {
+            PartKind::Tool { id, name, title } => {
                 self.tools.insert(id.clone(), self.parts.len());
                 Part::Tool {
                     id,
                     name,
+                    title,
                     input: None,
                     state: ToolState::Running,
                     output: None,
@@ -172,6 +185,14 @@ impl Answer {
         let index = *self.tools.get(id)?;
         if let Part::Tool { input, .. } = self.parts.get_mut(index)? {
             *input = Some(value);
+        }
+        self.changed(index)
+    }
+
+    fn set_title(&mut self, id: &str, value: String) -> Option<Emit> {
+        let index = *self.tools.get(id)?;
+        if let Part::Tool { title, .. } = self.parts.get_mut(index)? {
+            *title = Some(value);
         }
         self.changed(index)
     }

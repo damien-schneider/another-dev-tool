@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use tauri::AppHandle;
 
 use crate::agent::cli::crash_reason;
+use crate::ask::Proposal;
 use crate::agent::{self, Answer, Emit, RunHandle, StreamEvent};
 use crate::db::now_ms;
 use crate::events::{self, AgentDelta, AgentDone, AgentError, AgentPart};
@@ -11,15 +12,65 @@ use crate::events::{self, AgentDelta, AgentDone, AgentError, AgentPart};
 pub enum RunEnd {
     Completed,
     Failed(String),
+    SignedOut(String),
 }
 
 impl RunEnd {
     pub fn failed(&self) -> bool {
-        matches!(self, Self::Failed(_))
+        !matches!(self, Self::Completed)
     }
 }
 
-/// Streams the answer to the window as it grows; hands it back once the CLI exits.
+/// Streams an answer to the window as it grows.
+pub struct Relay<'a> {
+    app: &'a AppHandle,
+    run_id: u64,
+    answer: Answer,
+}
+
+impl<'a> Relay<'a> {
+    pub fn new(app: &'a AppHandle, run_id: u64) -> Self {
+        Self {
+            app,
+            run_id,
+            answer: Answer::default(),
+        }
+    }
+
+    pub fn apply(&mut self, event: StreamEvent) {
+        let run_id = self.run_id;
+        for emit in self.answer.apply(event, now()) {
+            match emit {
+                Emit::Delta { index, text } => {
+                    events::emit_agent_delta(
+                        self.app,
+                        AgentDelta {
+                            run_id,
+                            index,
+                            text,
+                        },
+                    );
+                }
+                Emit::PartChanged { index, part } => {
+                    events::emit_agent_part(
+                        self.app,
+                        AgentPart {
+                            run_id,
+                            index,
+                            part,
+                        },
+                    );
+                }
+            }
+        }
+    }
+
+    pub fn into_answer(self) -> Answer {
+        self.answer
+    }
+}
+
+/// Relays a Claude Code CLI run; hands the answer back once the CLI exits.
 pub fn relay(app: &AppHandle, handle: RunHandle) -> (Answer, RunEnd) {
     let RunHandle {
         run_id,
@@ -41,7 +92,7 @@ pub fn relay(app: &AppHandle, handle: RunHandle) -> (Answer, RunEnd) {
     };
 
     let mut end: Option<RunEnd> = None;
-    let mut answer = Answer::default();
+    let mut relay = Relay::new(app, run_id);
     for line in BufReader::new(stdout).lines().map_while(Result::ok) {
         for event in agent::parse_line(&line) {
             if let StreamEvent::Finished { error, .. } = &event {
@@ -50,30 +101,7 @@ pub fn relay(app: &AppHandle, handle: RunHandle) -> (Answer, RunEnd) {
                     None => RunEnd::Completed,
                 });
             }
-            for emit in answer.apply(event, now()) {
-                match emit {
-                    Emit::Delta { index, text } => {
-                        events::emit_agent_delta(
-                            app,
-                            AgentDelta {
-                                run_id,
-                                index,
-                                text,
-                            },
-                        );
-                    }
-                    Emit::PartChanged { index, part } => {
-                        events::emit_agent_part(
-                            app,
-                            AgentPart {
-                                run_id,
-                                index,
-                                part,
-                            },
-                        );
-                    }
-                }
-            }
+            relay.apply(event);
         }
     }
     let _ = collector.join();
@@ -82,7 +110,7 @@ pub fn relay(app: &AppHandle, handle: RunHandle) -> (Answer, RunEnd) {
         let tail = noise.lock().map(|slot| slot.clone()).unwrap_or_default();
         RunEnd::Failed(crash_reason(&tail))
     });
-    (answer, end)
+    (relay.into_answer(), end)
 }
 
 /// A cancelled run ends quietly: its failure is the user's own doing.
@@ -91,17 +119,29 @@ pub fn report(
     run_id: u64,
     end: RunEnd,
     cancelled: bool,
-    proposal: Option<String>,
+    proposals: Vec<Proposal>,
 ) {
-    match end {
-        RunEnd::Failed(message) if !cancelled => {
-            events::emit_agent_error(app, AgentError { run_id, message });
+    let failure = match end {
+        RunEnd::Failed(message) => Some((message, false)),
+        RunEnd::SignedOut(message) => Some((message, true)),
+        RunEnd::Completed => None,
+    };
+    match failure {
+        Some((message, sign_in)) if !cancelled => {
+            events::emit_agent_error(
+                app,
+                AgentError {
+                    run_id,
+                    message,
+                    sign_in,
+                },
+            );
         }
         _ => events::emit_agent_done(
             app,
             AgentDone {
                 run_id,
-                proposal,
+                proposals,
                 cancelled,
             },
         ),

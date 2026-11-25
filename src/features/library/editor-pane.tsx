@@ -1,9 +1,7 @@
 import {
   ChatWorkspace,
-  ChatWorkspaceInset,
   ChatWorkspaceMain,
 } from "@ctrl-ui/react/chat-workspace";
-import { cn } from "@ctrl-ui/react/lib/cn";
 import { Button } from "@ctrl-ui/react/ui/button";
 import { Kbd } from "@ctrl-ui/react/ui/kbd";
 import {
@@ -11,8 +9,6 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@ctrl-ui/react/ui/resizable";
-import { ScrollArea } from "@ctrl-ui/react/ui/scroll-area";
-import { Skeleton } from "@ctrl-ui/react/ui/skeleton";
 import { Spinner } from "@ctrl-ui/react/ui/spinner";
 import { Text } from "@ctrl-ui/react/ui/typography";
 import { FileText, RefreshCw } from "lucide-react";
@@ -20,17 +16,14 @@ import { useEffect, useState } from "react";
 import { AgentPanel } from "@/features/agent/agent-panel";
 import type { UseAgentSession } from "@/features/agent/use-agent-session";
 import { HistoryPanel } from "@/features/history/history-panel";
-import { LinksBar } from "@/features/links/links-bar";
 import { MentionPreview } from "@/features/links/mention-preview";
 import { useFileLinks } from "@/features/links/use-file-links";
-import {
-  type SkillMentions,
-  useSkillMentions,
-} from "@/features/links/use-skill-mentions";
+import { useSkillMentions } from "@/features/links/use-skill-mentions";
 import { scanSummary } from "@/features/scan/scan-status";
 import type { UseScan } from "@/features/scan/use-scan";
-import type { FileLinks, FileRow } from "@/lib/ipc-types";
-import { EmptyState, ErrorState } from "@/shared/components/view-layout";
+import type { FileRow } from "@/lib/ipc-types";
+import { EmptyState } from "@/shared/components/view-layout";
+import { DocumentBody } from "./editor/document-body";
 import {
   ConflictDialog,
   ReviewChangesDialog,
@@ -38,9 +31,7 @@ import {
 } from "./editor/editor-dialogs";
 import { EditorHeader } from "./editor/editor-header";
 import { EditorNotices } from "./editor/editor-notices";
-import { MetadataFields } from "./editor/metadata-fields";
-import { RichEditor } from "./editor/rich-editor";
-import { SourceEditor } from "./editor/source-editor";
+import { useEditorSelection } from "./editor/use-editor-selection";
 import { fileTitle } from "./library-model";
 import type { UseFileContent } from "./use-file-content";
 import type { UseSidePanel } from "./use-side-panel";
@@ -64,8 +55,6 @@ export interface EditorPaneProps {
   sidePanel: UseSidePanel;
 }
 
-const DOCUMENT_COLUMN =
-  "mx-auto flex w-full max-w-3xl flex-col gap-8 px-10 py-8";
 const SIDE_PANEL_WIDTH_STORAGE_KEY = "another-dev-tool.agent-panel-width";
 const SIDE_PANEL_DEFAULT_WIDTH = 384;
 const AGENT_DOCKED_STORAGE_KEY = "another-dev-tool.agent-docked";
@@ -146,87 +135,6 @@ function NothingOpen({
   );
 }
 
-function DocumentSkeleton() {
-  return (
-    <output aria-label="Loading the file" className={DOCUMENT_COLUMN}>
-      <Skeleton className="h-9 w-2/5" />
-      <div className="flex flex-col gap-3">
-        <Skeleton className="h-4" />
-        <Skeleton className="h-4" />
-        <Skeleton className="h-4 w-3/4" />
-      </div>
-    </output>
-  );
-}
-
-function DocumentBody({
-  editor,
-  file,
-  links,
-  mentions,
-  onOpenFile,
-}: {
-  editor: UseFileContent;
-  file: FileRow;
-  links: FileLinks;
-  mentions: SkillMentions;
-  onOpenFile: (file: FileRow) => void;
-}) {
-  const { buffer } = editor;
-  if (editor.loading) {
-    return <DocumentSkeleton />;
-  }
-  if (!buffer) {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center">
-        <ErrorState
-          message={editor.error ?? "The file could not be read."}
-          onRetry={editor.reload}
-        />
-      </div>
-    );
-  }
-
-  const label = `${fileTitle(file)} content`;
-  const lockedLook = editor.readOnly ? "opacity-60" : undefined;
-  if (editor.mode === "raw") {
-    return (
-      <div className={cn("min-h-0 flex-1 transition-opacity", lockedLook)}>
-        <SourceEditor
-          label={`${label}, as source`}
-          onChange={editor.setRaw}
-          readOnly={editor.readOnly}
-          value={buffer.raw}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <ScrollArea className="min-h-0 flex-1">
-      <div className={cn(DOCUMENT_COLUMN, "transition-opacity", lockedLook)}>
-        <MetadataFields
-          file={file}
-          frontmatter={buffer.split.frontmatter}
-          onChange={editor.setFrontmatterField}
-          onEditSource={() => editor.setMode("raw")}
-          readOnly={editor.readOnly}
-        />
-        <LinksBar links={links} onSelect={onOpenFile} />
-        <RichEditor
-          body={buffer.body}
-          extensions={mentions.extensions}
-          key={`${file.id}:${editor.revision}`}
-          label={label}
-          onChange={editor.setBody}
-          readOnly={editor.readOnly}
-        />
-      </div>
-      <ChatWorkspaceInset />
-    </ScrollArea>
-  );
-}
-
 export function EditorPane({
   agent,
   editor,
@@ -257,6 +165,11 @@ export function EditorPane({
   const mentions = useSkillMentions({
     targets: links.outgoing,
     onOpen: onOpenFile,
+  });
+  const editorSelection = useEditorSelection({
+    mode: editor.mode,
+    revision: editor.revision,
+    split: editor.buffer?.split ?? null,
   });
 
   // Closing or reloading the window is the one way to lose edits without being asked.
@@ -327,6 +240,7 @@ export function EditorPane({
                   links={links}
                   mentions={mentions}
                   onOpenFile={onOpenFile}
+                  onSelectionChange={editorSelection.select}
                 />
                 <MentionPreview mentions={mentions} />
               </section>
@@ -340,6 +254,8 @@ export function EditorPane({
                   editor.replaceDocument(text);
                 }}
                 onClose={() => sidePanel.toggle("agent")}
+                onRemoveSelection={editorSelection.clear}
+                selection={editorSelection.selection}
                 session={agent}
               />
             ) : null}

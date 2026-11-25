@@ -9,9 +9,9 @@ import {
   emitPart,
   kinds,
   mocks,
+  proposed,
   READ,
   resetMocks,
-  SETTINGS,
   said,
   TEXT,
   THINKING,
@@ -41,7 +41,10 @@ async function ask(
   document = "# Before"
 ) {
   await act(async () => {
-    await view.result.current.send({ prompt, images: [] }, document, SETTINGS);
+    await view.result.current.send(
+      { prompt, images: [], selection: null },
+      document
+    );
   });
 }
 
@@ -60,9 +63,8 @@ describe("useAgentSession", () => {
 
     await act(async () => {
       await view.result.current.send(
-        { prompt: "match this layout", images: [SCREENSHOT] },
-        "# Before",
-        SETTINGS
+        { prompt: "match this layout", images: [SCREENSHOT], selection: null },
+        "# Before"
       );
     });
 
@@ -73,7 +75,8 @@ describe("useAgentSession", () => {
       prompt: "match this layout",
       images: [SCREENSHOT],
       references: [],
-      settings: SETTINGS,
+      selection: null,
+      agent: { id: "claude-acp", config: [] },
     });
     expect(view.result.current.messages).toEqual([
       expect.objectContaining({
@@ -155,7 +158,7 @@ describe("useAgentSession", () => {
       said(1, "you", "tighten it"),
       said(2, "agent", "Tightened."),
     ]);
-    act(() => emitDone({ runId: 7, proposal: null, cancelled: false }));
+    act(() => emitDone({ runId: 7, proposals: [], cancelled: false }));
 
     await waitFor(() =>
       expect(view.result.current.messages.at(-1)?.key).toBe(live)
@@ -166,16 +169,24 @@ describe("useAgentSession", () => {
     ]);
   });
 
-  it("surfaces the edited document once the run reports back", async () => {
+  it("surfaces each edited file once the run reports back, until dismissed", async () => {
     const view = open();
     await ask(view);
 
-    act(() => emitDone({ runId: 7, proposal: "# After", cancelled: false }));
+    act(() =>
+      emitDone({
+        runId: 7,
+        proposals: [proposed(1, "# After"), proposed(5, "# Skill after")],
+        cancelled: false,
+      })
+    );
 
-    await waitFor(() => {
-      expect(view.result.current.proposal).toBe("# After");
-      expect(view.result.current.running).toBe(false);
-    });
+    await waitFor(() => expect(view.result.current.running).toBe(false));
+    expect(view.result.current.proposals.map((p) => p.fileId)).toEqual([1, 5]);
+    view.rerender({ file: 2 });
+    expect(view.result.current.proposals).toHaveLength(2);
+    act(() => view.result.current.dismissProposal(5));
+    expect(view.result.current.proposals.map((p) => p.fileId)).toEqual([1]);
   });
 
   it("ignores a run it does not own, so a stale reply cannot land", async () => {
@@ -185,10 +196,14 @@ describe("useAgentSession", () => {
     act(() => {
       emitPart(0, TEXT, 99);
       emitDelta({ runId: 99, index: 0, text: "ghost" });
-      emitDone({ runId: 99, proposal: "# Wrong", cancelled: false });
+      emitDone({
+        runId: 99,
+        proposals: [proposed(1, "# Wrong")],
+        cancelled: false,
+      });
     });
 
-    expect(view.result.current.proposal).toBeNull();
+    expect(view.result.current.proposals).toEqual([]);
     expect(view.result.current.messages).toHaveLength(1);
     expect(view.result.current.running).toBe(true);
   });
@@ -214,7 +229,7 @@ describe("useAgentSession", () => {
     act(() => view.result.current.removeReference(skill.path));
     for (const prompt of ["match them", "and the intro"]) {
       await ask(view, prompt);
-      act(() => emitDone({ runId: 7, proposal: null, cancelled: false }));
+      act(() => emitDone({ runId: 7, proposals: [], cancelled: false }));
       await waitFor(() => expect(view.result.current.running).toBe(false));
     }
 

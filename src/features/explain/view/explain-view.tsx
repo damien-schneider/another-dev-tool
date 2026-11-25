@@ -9,8 +9,6 @@ import {
 } from "@ctrl-ui/react/chat-layout";
 import { ChevronsDown, ChevronsUp } from "lucide-react";
 import { useMemo, useState } from "react";
-
-import { ClaudeCodeMissing } from "@/features/agent/agent-panel";
 import {
   type SettingsScope,
   useAgentSettings,
@@ -19,6 +17,7 @@ import { AgentTranscript } from "@/features/agent/agent-transcript";
 import { ConversationHistory } from "@/features/agent/conversation-history";
 import type { LibraryScope } from "@/features/library/library-model";
 import type { ExplainLevel } from "@/lib/explain-ipc-types";
+import { ClaudeCodeMissing } from "@/shared/components/claude-code-missing";
 
 import { EXPLAIN_MARKDOWN } from "../explain-markdown";
 import { type ExplainSurface, ExplainSurfaceContext } from "../explain-surface";
@@ -141,7 +140,7 @@ export function ExplainView({
               aria-label="Explanation"
               composer={
                 <>
-                  <ChatThreadScrollButton />
+                  <ChatThreadScrollButton busy={session.running} />
                   <ExplainComposer
                     level={level}
                     onLevelChange={setLevel}

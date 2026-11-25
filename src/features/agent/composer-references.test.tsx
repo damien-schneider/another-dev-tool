@@ -1,12 +1,15 @@
 import { ChatWorkspace } from "@ctrl-ui/react/chat-workspace";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { FileRow } from "@/lib/ipc-types";
+import type { TextSelection } from "@/lib/text-selection";
 
 import { AgentPanel } from "./agent-panel";
+import { agentChoice } from "./agent-panel.fixtures";
 import { type AgentReference, writeReference } from "./agent-references";
+import type { UseAgentSession } from "./use-agent-session";
 
 const FILE: FileRow = {
   id: 1,
@@ -41,6 +44,12 @@ const CRAFT: AgentReference = {
   kind: "skill",
 };
 
+const SELECTION: TextSelection = {
+  text: "Never claude-in-chrome\nunless I name it.",
+  firstLine: 2,
+  lastLine: 3,
+};
+
 function draggedRow(reference: AgentReference) {
   const data = new Map<string, string>();
   const types: string[] = [];
@@ -68,9 +77,19 @@ function chips() {
     .map((chip) => chip.getAttribute("aria-label"));
 }
 
-function Panel({ initial = [] }: { initial?: AgentReference[] }) {
+function Panel({
+  initial = [],
+  selected = null,
+  send = vi.fn().mockResolvedValue(undefined),
+}: {
+  initial?: AgentReference[];
+  selected?: TextSelection | null;
+  send?: UseAgentSession["send"];
+}) {
   const [references, setReferences] = useState(initial);
   const [includesFile, includeFile] = useState(true);
+  const [selection, setSelection] = useState(selected);
+  const [draft, setDraft] = useState("");
   return (
     <ChatWorkspace>
       <AgentPanel
@@ -78,8 +97,10 @@ function Panel({ initial = [] }: { initial?: AgentReference[] }) {
         file={FILE}
         onApply={vi.fn()}
         onClose={vi.fn()}
+        onRemoveSelection={() => setSelection(null)}
+        selection={selection}
         session={{
-          available: true,
+          agent: agentChoice(),
           conversations: [],
           conversationId: null,
           openConversation: vi.fn(),
@@ -87,7 +108,8 @@ function Panel({ initial = [] }: { initial?: AgentReference[] }) {
           messages: [],
           running: false,
           error: null,
-          proposal: null,
+          signedOut: false,
+          proposals: [],
           references,
           addReference: (reference) =>
             setReferences((current) => [...current, reference]),
@@ -97,11 +119,11 @@ function Panel({ initial = [] }: { initial?: AgentReference[] }) {
             ),
           includesFile,
           includeFile,
-          send: vi.fn().mockResolvedValue(undefined),
+          send,
           cancel: vi.fn().mockResolvedValue(undefined),
           dismissProposal: vi.fn(),
-          draft: "",
-          setDraft: vi.fn(),
+          draft,
+          setDraft,
           prefill: vi.fn(),
         }}
       />
@@ -153,7 +175,9 @@ describe("composer references", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove break" }));
 
     expect(screen.queryByRole("button", { name: "Remove break" })).toBeNull();
-    expect(screen.getByRole("textbox", { name: "Ask Claude" })).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: "Ask Claude Agent" })
+    ).toBeTruthy();
     const offer = screen.getByRole("button", { name: "Add break" });
     expect(offer.dataset.variant).toBe("ghost");
 
@@ -183,5 +207,42 @@ describe("composer references", () => {
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Remove break" })
     );
+  });
+
+  it("sends the selected lines with the request, until their chip is removed", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    render(<Panel selected={SELECTION} send={send} />);
+    const composer = screen.getByRole("textbox");
+    const chip = screen.getByRole("button", { name: "Remove Lines 2–3" });
+    expect(chip.title).toBe(SELECTION.text);
+    expect(composer.closest("form")?.hasAttribute("data-draft")).toBe(true);
+
+    fireEvent.change(composer, { target: { value: "tighten it" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    await waitFor(() =>
+      expect(send).toHaveBeenLastCalledWith(
+        { prompt: "tighten it", images: [], selection: SELECTION },
+        "# Break"
+      )
+    );
+
+    fireEvent.click(chip);
+    expect(
+      screen.queryByRole("button", { name: "Remove Lines 2–3" })
+    ).toBeNull();
+    fireEvent.change(composer, { target: { value: "and kinder" } });
+    fireEvent.keyDown(composer, { key: "Enter" });
+    await waitFor(() =>
+      expect(send).toHaveBeenLastCalledWith(
+        { prompt: "and kinder", images: [], selection: null },
+        "# Break"
+      )
+    );
+  });
+
+  it("names a one-line selection by its line", () => {
+    render(<Panel selected={{ ...SELECTION, lastLine: 2 }} />);
+
+    expect(screen.getByRole("button", { name: "Remove Line 2" })).toBeTruthy();
   });
 });

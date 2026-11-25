@@ -91,7 +91,8 @@ export function stepLabel(step: AgentStep) {
   const running = step.state === "running";
   const verbs = TOOLS[step.name];
   if (!verbs) {
-    return `${running ? "Using" : "Used"} ${step.name}`;
+    const title = step.title?.split("\n")[0]?.trim();
+    return title || `${running ? "Using" : "Used"} ${step.name}`;
   }
   const verb = running ? verbs.doing : verbs.done;
   const target = verbs.target?.(step.input) ?? null;
@@ -142,9 +143,14 @@ export function answerText(parts: AgentPart[]) {
 export function metaLabel(meta: AgentAnswerMeta) {
   const model =
     meta.model === null
-      ? MODELS.find((option) => option.value === meta.requestedModel)?.label
+      ? (MODELS.find((option) => option.value === meta.requestedModel)?.label ??
+        meta.requestedModel)
       : modelIdentity(meta.model).name;
-  const effort = EFFORTS.find((option) => option.value === meta.effort)?.label;
+  const effort =
+    meta.effort === null
+      ? null
+      : (EFFORTS.find((option) => option.value === meta.effort)?.label ??
+        meta.effort);
   const time =
     meta.durationMs === null ? null : formatDuration(meta.durationMs);
   return [model, effort, time].filter(Boolean).join(" · ");

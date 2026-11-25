@@ -3,7 +3,7 @@ use std::process::Command;
 
 use serde::Serialize;
 
-const BINARY: &str = "claude";
+pub const CLAUDE: &str = "claude";
 const EXTRA_PATHS: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
 const STDERR_TAIL: usize = 600;
 
@@ -28,12 +28,12 @@ fn install_prefixes() -> Vec<PathBuf> {
     prefixes
 }
 
-/// A bundled app inherits a bare PATH, so the login shell is the only place the
-/// CLI is guaranteed to be resolvable once the usual prefixes miss.
-fn from_login_shell() -> Option<PathBuf> {
+/// A bundled app inherits a bare PATH, so the login shell is the only place a
+/// tool is guaranteed to be resolvable once the usual prefixes miss.
+fn from_login_shell(binary: &str) -> Option<PathBuf> {
     let shell = std::env::var("SHELL").ok()?;
     let output = Command::new(shell)
-        .args(["-lic", &format!("command -v {BINARY}")])
+        .args(["-lic", &format!("command -v {binary}")])
         .output()
         .ok()?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -44,15 +44,27 @@ fn from_login_shell() -> Option<PathBuf> {
             .find(|line| !line.trim().is_empty())?
             .trim(),
     );
-    path.is_file().then_some(path)
+    path.is_file().then(|| settled(&path))
 }
 
-pub fn resolve() -> Option<PathBuf> {
+/// Version managers such as fnm hand each shell a throwaway symlinked bin
+/// directory; its real target outlives the shell that printed it.
+fn settled(path: &Path) -> PathBuf {
+    match (
+        path.parent().and_then(|dir| dir.canonicalize().ok()),
+        path.file_name(),
+    ) {
+        (Some(dir), Some(name)) => dir.join(name),
+        _ => path.to_path_buf(),
+    }
+}
+
+pub fn resolve(binary: &str) -> Option<PathBuf> {
     install_prefixes()
         .into_iter()
-        .map(|prefix| prefix.join(BINARY))
+        .map(|prefix| prefix.join(binary))
         .find(|candidate| candidate.is_file())
-        .or_else(from_login_shell)
+        .or_else(|| from_login_shell(binary))
 }
 
 /// The child spawns node and its own helpers, so it needs a usable PATH of its
@@ -67,7 +79,7 @@ pub fn child_path(binary: &Path) -> String {
 }
 
 pub fn status() -> AgentStatus {
-    let Some(path) = resolve() else {
+    let Some(path) = resolve(CLAUDE) else {
         return AgentStatus {
             available: false,
             path: None,
@@ -109,6 +121,20 @@ mod tests {
 
         assert!(path.starts_with("/Users/someone/.local/bin:"));
         assert!(path.contains("/opt/homebrew/bin"));
+    }
+
+    #[test]
+    fn a_tool_found_through_a_symlinked_directory_keeps_its_real_location() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("node/bin");
+        std::fs::create_dir_all(&real).unwrap();
+        std::fs::write(real.join("npx"), "").unwrap();
+        let shell_dir = root.path().join("multishell");
+        std::os::unix::fs::symlink(root.path().join("node"), &shell_dir).unwrap();
+
+        let found = settled(&shell_dir.join("bin/npx"));
+
+        assert_eq!(found, real.canonicalize().unwrap().join("npx"));
     }
 
     #[test]

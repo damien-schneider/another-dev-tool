@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
-  AgentAnswerMeta,
-  AgentConversationSummary,
-  AgentPart,
-  AgentRunSettings,
-  AgentStoredMessage,
+  AgentProposal,
+  AskConversationSummary,
 } from "@/lib/agent-ipc-types";
 import {
   onAgentDelta,
@@ -17,12 +14,16 @@ import {
   agentConversation,
   agentConversations,
   agentSend,
-  agentStatus,
   toIpcError,
 } from "@/lib/ipc";
-
+import type { TextSelection } from "@/lib/text-selection";
 import type { AgentImage } from "./agent-images";
 import { append, type Live, place } from "./agent-live";
+import { type AgentMessage, fromHistory } from "./agent-messages";
+import {
+  type AgentChoice,
+  useAgentChoice,
+} from "./agent-picker/use-agent-choice";
 import type { AgentReference } from "./agent-references";
 import { keyOf, same, shown, type Tagged, type View } from "./agent-view";
 import { type AgentDrafts, useAgentDrafts } from "./use-agent-drafts";
@@ -30,67 +31,39 @@ import { type AgentDrafts, useAgentDrafts } from "./use-agent-drafts";
 export interface AgentRequest {
   prompt: string;
   images: AgentImage[];
+  selection: TextSelection | null;
 }
 
-export type AgentMessage =
-  | { key: string; role: "you"; text: string; images: AgentImage[] }
-  | {
-      key: string;
-      role: "agent";
-      parts: AgentPart[];
-      meta: AgentAnswerMeta | null;
-    };
-
 export interface UseAgentSession extends AgentDrafts {
-  available: boolean;
-  conversations: AgentConversationSummary[];
+  agent: AgentChoice;
+  conversations: AskConversationSummary[];
   conversationId: string | null;
   openConversation: (conversationId: string) => void;
   newConversation: () => void;
   messages: AgentMessage[];
   running: boolean;
   error: string | null;
-  proposal: string | null;
+  signedOut: boolean;
+  proposals: AgentProposal[];
   references: AgentReference[];
   addReference: (reference: AgentReference) => void;
   removeReference: (path: string) => void;
   includesFile: boolean;
   includeFile: (included: boolean) => void;
-  send: (
-    request: AgentRequest,
-    document: string,
-    settings: AgentRunSettings
-  ) => Promise<void>;
+  send: (request: AgentRequest, document: string) => Promise<void>;
   cancel: () => Promise<void>;
-  dismissProposal: () => void;
+  dismissProposal: (fileId: number) => void;
 }
 
 const BUSY_ELSEWHERE =
-  "Claude is still answering in another conversation. Stop it there or wait for it to finish.";
+  "Still answering in another conversation. Stop it there or wait for it to finish.";
 
-function fromHistory(stored: AgentStoredMessage[]): AgentMessage[] {
-  return stored.map((message) =>
-    message.role === "you"
-      ? {
-          key: `stored-${message.id}`,
-          role: "you",
-          text: message.text,
-          images: message.images.map((image, index) => ({
-            ...image,
-            id: `${message.id}-${index}`,
-          })),
-        }
-      : {
-          key: `stored-${message.id}`,
-          role: "agent",
-          parts:
-            message.parts.length > 0
-              ? message.parts
-              : [{ kind: "text", text: message.text }],
-          meta: message.meta,
-        }
-  );
+interface Failure {
+  message: string;
+  signIn: boolean;
 }
+
+const failure = (message: string): Failure => ({ message, signIn: false });
 
 function withoutKey<T>(record: Record<string, T>, key: string) {
   const { [key]: _dropped, ...rest } = record;
@@ -98,34 +71,40 @@ function withoutKey<T>(record: Record<string, T>, key: string) {
 }
 
 export function useAgentSession(fileId: number | null): UseAgentSession {
-  const [available, setAvailable] = useState(false);
-  const [view, setView] = useState<View>({ fileId, conversationId: null });
-  const [lists, setLists] = useState<
-    Record<number, AgentConversationSummary[]>
-  >({});
+  const [view, setView] = useState<View>({ conversationId: null });
+  const [conversations, setConversations] = useState<AskConversationSummary[]>(
+    []
+  );
   const [transcripts, setTranscripts] = useState<
     Record<string, AgentMessage[]>
   >({});
   const [live, setLive] = useState<Live | null>(null);
-  const [error, setError] = useState<Tagged<string> | null>(null);
-  const [proposal, setProposal] = useState<Tagged<string> | null>(null);
+  const [error, setError] = useState<Tagged<Failure> | null>(null);
+  const [proposals, setProposals] = useState<Tagged<AgentProposal[]> | null>(
+    null
+  );
   const [references, setReferences] = useState<AgentReference[]>([]);
   const [includesFile, includeFile] = useState(true);
+  const [aboutFile, setAboutFile] = useState(fileId);
   const runRef = useRef<{ runId: number; view: View } | null>(null);
   const askedRef = useRef(0);
+  const pinned =
+    conversations.find(
+      (conversation) => conversation.id === view.conversationId
+    )?.agentId ?? null;
+  const choice = useAgentChoice(pinned);
 
-  if (view.fileId !== fileId) {
-    const latest = fileId === null ? undefined : lists[fileId]?.[0];
-    setView({ fileId, conversationId: latest?.id ?? null });
+  if (aboutFile !== fileId) {
+    setAboutFile(fileId);
     setReferences([]);
     includeFile(true);
   }
 
   const load = useCallback((loaded: View) => {
-    if (loaded.fileId === null || loaded.conversationId === null) {
+    if (loaded.conversationId === null) {
       return;
     }
-    agentConversation(loaded.fileId, loaded.conversationId)
+    agentConversation(loaded.conversationId)
       .then((stored) => {
         setTranscripts((current) => ({
           ...current,
@@ -136,52 +115,43 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
         );
       })
       .catch((cause) =>
-        setError({ view: loaded, value: toIpcError(cause).message })
+        setError({ view: loaded, value: failure(toIpcError(cause).message) })
       );
   }, []);
 
   const list = useCallback(
-    (listed: number) =>
-      agentConversations(listed).then((found) => {
-        setLists((current) => ({ ...current, [listed]: found }));
+    () =>
+      agentConversations().then((found) => {
+        setConversations(found);
         return found;
       }),
     []
   );
 
   useEffect(() => {
-    agentStatus().then((status) => setAvailable(status.available));
-  }, []);
-
-  useEffect(() => {
-    if (fileId === null) {
-      return;
-    }
     let current = true;
-    list(fileId)
+    list()
       .then((found) => {
         const latest = found[0];
         if (!(current && latest)) {
           return;
         }
-        const opened = { fileId, conversationId: latest.id };
+        const opened = { conversationId: latest.id };
         setView((showing) =>
-          showing.fileId === fileId && showing.conversationId === null
-            ? opened
-            : showing
+          showing.conversationId === null ? opened : showing
         );
         load(opened);
       })
       .catch((cause) =>
         setError({
-          view: { fileId, conversationId: null },
-          value: toIpcError(cause).message,
+          view: { conversationId: null },
+          value: failure(toIpcError(cause).message),
         })
       );
     return () => {
       current = false;
     };
-  }, [fileId, list, load]);
+  }, [list, load]);
 
   useEffect(() => {
     const owned = (runId: number) =>
@@ -217,20 +187,18 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
           );
         }
       }),
-      onAgentDone(({ runId, proposal: next }) => {
+      onAgentDone(({ runId, proposals: next }) => {
         const run = settle(runId);
         if (run) {
-          setProposal(next === null ? null : { view: run.view, value: next });
+          setProposals({ view: run.view, value: next });
           load(run.view);
-          if (run.view.fileId !== null) {
-            list(run.view.fileId).catch(() => undefined);
-          }
+          list().catch(() => undefined);
         }
       }),
-      onAgentError(({ runId, message }) => {
+      onAgentError(({ runId, message, signIn }) => {
         const run = settle(runId);
         if (run) {
-          setError({ view: run.view, value: message });
+          setError({ view: run.view, value: { message, signIn } });
         }
       }),
     ]);
@@ -247,15 +215,11 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
   const inFlight = live !== null && !live.done;
 
   const send = useCallback(
-    async (
-      { prompt, images }: AgentRequest,
-      document: string,
-      settings: AgentRunSettings
-    ) => {
-      const sentFile = view.fileId;
+    async ({ prompt, images, selection }: AgentRequest, document: string) => {
+      const sentFile = fileId;
       if (sentFile === null || inFlight) {
         if (inFlight && live && !same(live.view, view)) {
-          setError({ view, value: BUSY_ELSEWHERE });
+          setError({ view, value: failure(BUSY_ELSEWHERE) });
         }
         return;
       }
@@ -268,7 +232,7 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
         images,
       };
       setError(null);
-      setProposal(null);
+      setProposals(null);
       setTranscripts((current) => ({
         ...current,
         [keyOf(sent)]: [...(current[keyOf(sent)] ?? []), asked],
@@ -287,12 +251,10 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
           prompt,
           images,
           references: references.map((reference) => reference.path),
-          settings,
+          selection,
+          agent: { id: choice.agentId, config: choice.config },
         });
-        const settled = {
-          fileId: sentFile,
-          conversationId: started.conversationId,
-        };
+        const settled = { conversationId: started.conversationId };
         runRef.current = { runId: started.runId, view: settled };
         setLive(
           (current) =>
@@ -304,36 +266,68 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
             [keyOf(settled)]: current[keyOf(sent)] ?? [asked],
           }));
           setView((showing) => (same(showing, sent) ? settled : showing));
-          list(sentFile).catch(() => undefined);
+          list().catch(() => undefined);
         }
       } catch (cause) {
         setLive(null);
-        setError({ view: sent, value: toIpcError(cause).message });
+        setError({ view: sent, value: failure(toIpcError(cause).message) });
       }
     },
-    [includesFile, inFlight, list, live, references, view]
+    [
+      choice.agentId,
+      choice.config,
+      fileId,
+      includesFile,
+      inFlight,
+      list,
+      live,
+      references,
+      view,
+    ]
   );
 
   const openConversation = useCallback(
     (conversationId: string) => {
-      const opened = { fileId: view.fileId, conversationId };
+      const opened = { conversationId };
       setView(opened);
       load(opened);
     },
-    [load, view.fileId]
+    [load]
   );
 
   const newConversation = useCallback(() => {
-    const draft = { fileId: view.fileId, conversationId: null };
+    const draft = { conversationId: null };
     setView(draft);
     setTranscripts((current) => withoutKey(current, keyOf(draft)));
-  }, [view.fileId]);
+  }, []);
+
+  const { choose } = choice;
+  const chooseAgent = useCallback(
+    (agentId: string) => {
+      if (agentId === choice.agentId) {
+        return;
+      }
+      choose(agentId);
+      newConversation();
+    },
+    [choice.agentId, choose, newConversation]
+  );
 
   const cancel = useCallback(async () => {
     await agentCancel();
   }, []);
 
-  const dismissProposal = useCallback(() => setProposal(null), []);
+  const dismissProposal = useCallback((dismissed: number) => {
+    setProposals(
+      (current) =>
+        current && {
+          ...current,
+          value: current.value.filter(
+            (proposal) => proposal.fileId !== dismissed
+          ),
+        }
+    );
+  }, []);
 
   const addReference = useCallback((reference: AgentReference) => {
     setReferences((current) =>
@@ -349,7 +343,7 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
     );
   }, []);
 
-  const drafts = useAgentDrafts(view.fileId);
+  const drafts = useAgentDrafts(fileId);
 
   const liveHere = live && same(live.view, view) ? live : null;
   const messages: AgentMessage[] = [
@@ -369,16 +363,19 @@ export function useAgentSession(fileId: number | null): UseAgentSession {
     key: `${keyOf(view)}#${position}`,
   }));
 
+  const failed = shown(error, view);
+
   return {
-    available,
-    conversations: view.fileId === null ? [] : (lists[view.fileId] ?? []),
+    agent: { ...choice, choose: chooseAgent },
+    conversations,
     conversationId: view.conversationId,
     openConversation,
     newConversation,
     messages,
     running: liveHere !== null && !liveHere.done,
-    error: shown(error, view),
-    proposal: shown(proposal, view),
+    error: failed?.message ?? null,
+    signedOut: failed?.signIn ?? false,
+    proposals: shown(proposals, view) ?? [],
     references,
     addReference,
     removeReference,

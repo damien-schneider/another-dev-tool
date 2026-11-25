@@ -34,7 +34,7 @@ pub fn patterns_state(state: State<'_, AppState>) -> AppResult<PatternsState> {
 
 #[tauri::command]
 pub fn patterns_analyze(app: AppHandle, state: State<'_, AppState>) -> AppResult<()> {
-    let binary = cli::resolve().ok_or(AppError::AgentMissing)?;
+    let binary = cli::resolve(cli::CLAUDE).ok_or(AppError::AgentMissing)?;
     let home = dirs::home_dir().ok_or_else(|| AppError::internal("no home folder"))?;
     state.patterns.begin()?;
     std::thread::spawn(move || run(&app, &binary, &home));

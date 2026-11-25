@@ -5,9 +5,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import type { AgentMessage } from "../agent/agent-messages";
 import { answerText } from "../agent/agent-steps";
-import type { AgentMessage } from "../agent/use-agent-session";
 import {
   type ExplainRequest,
   type UseExplainSession,

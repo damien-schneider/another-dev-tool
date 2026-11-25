@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::answer::Requested;
+
 /// Claude Code aliases: each tracks the latest model of its family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -53,5 +55,14 @@ pub struct RunSettings {
 impl RunSettings {
     pub fn args(self) -> [&'static str; 4] {
         ["--model", self.model.arg(), "--effort", self.effort.arg()]
+    }
+}
+
+impl From<RunSettings> for Requested {
+    fn from(settings: RunSettings) -> Self {
+        Self {
+            model: settings.model.arg().to_string(),
+            effort: Some(settings.effort.arg().to_string()),
+        }
     }
 }

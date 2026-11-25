@@ -6,7 +6,14 @@ import { DiffView } from "./diff-view";
 
 describe("DiffView", () => {
   it("says so instead of drawing an empty diff when nothing changed", () => {
-    render(<DiffView after={"# Rules\n"} before={"# Rules\n"} />);
+    render(
+      <DiffView
+        after={"# Rules\n"}
+        before={"# Rules\n"}
+        maxHeight="16rem"
+        name="Rules"
+      />
+    );
 
     expect(screen.getByText("No changes.")).toBeVisible();
     expect(screen.queryByRole("figure")).toBeNull();
@@ -17,6 +24,8 @@ describe("DiffView", () => {
       <DiffView
         after={"# Rules\n\nKeep it short and kind.\n"}
         before={"# Rules\n\nKeep it short.\n"}
+        maxHeight="16rem"
+        name="Rules"
       />
     );
 
@@ -27,7 +36,14 @@ describe("DiffView", () => {
   });
 
   it("treats a change of trailing newline as a change", () => {
-    render(<DiffView after={"# Rules\n"} before={"# Rules"} />);
+    render(
+      <DiffView
+        after={"# Rules\n"}
+        before={"# Rules"}
+        maxHeight="16rem"
+        name="Rules"
+      />
+    );
 
     expect(screen.getByRole("figure")).toBeVisible();
   });

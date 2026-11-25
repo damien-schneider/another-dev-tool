@@ -137,6 +137,9 @@ impl Db {
         if version < 12 {
             conn.execute_batch(schema::MIGRATION_12)?;
         }
+        if version < 13 {
+            conn.execute_batch(schema::MIGRATION_13)?;
+        }
 
         conn.execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2)
@@ -413,6 +416,51 @@ mod tests {
                 .unwrap(),
             Some(schema::SCHEMA_VERSION.to_string())
         );
+    }
+
+    #[test]
+    fn migrating_from_version_twelve_pins_old_conversations_to_claude_and_keeps_held_sessions() {
+        let conn = Connection::open_in_memory().unwrap();
+        for migration in [
+            schema::MIGRATION_1,
+            schema::MIGRATION_2,
+            schema::MIGRATION_3,
+            schema::MIGRATION_4,
+            schema::MIGRATION_5,
+            schema::MIGRATION_6,
+            schema::MIGRATION_7,
+            schema::MIGRATION_8,
+            schema::MIGRATION_9,
+            schema::MIGRATION_10,
+            schema::MIGRATION_11,
+            schema::MIGRATION_12,
+        ] {
+            conn.execute_batch(migration).unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO meta (key, value) VALUES ('schema_version', '12');
+             INSERT INTO roots (id, path, enabled, added_at) VALUES (1, '/repo', 1, 0);
+             INSERT INTO files (id, root_id, path, rel_path, kind, size, mtime_ns, hash,
+                                first_seen_at)
+             VALUES (1, 1, '/repo/SKILL.md', 'SKILL.md', 'skill', 1, 1, 'h', 0);
+             INSERT INTO agent_conversations (id, file_id, title, started, created_at, updated_at)
+             VALUES ('held', 1, 'Hi', 1, 1, 1), ('fresh', 1, 'Yo', 0, 1, 1);",
+        )
+        .unwrap();
+
+        let db = Db::from_connection(conn).unwrap();
+
+        let held = db
+            .with_conn(|conn| agent_repo::get(conn, "held"))
+            .unwrap()
+            .unwrap();
+        let fresh = db
+            .with_conn(|conn| agent_repo::get(conn, "fresh"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(held.agent_id, "claude-acp");
+        assert_eq!(held.agent_session_id.as_deref(), Some("held"));
+        assert_eq!(fresh.agent_session_id, None);
     }
 
     #[test]

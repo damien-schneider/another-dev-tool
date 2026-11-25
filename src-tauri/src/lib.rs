@@ -1,4 +1,6 @@
+mod acp;
 mod agent;
+mod ask;
 mod capture;
 mod commands;
 mod db;
@@ -60,6 +62,7 @@ pub fn run() {
                 db,
                 app_data_dir.join("prompt-attachments"),
                 app_data_dir.join("agent-conversations"),
+                app_data_dir.join("acp-agents"),
                 app_data_dir.join("explainer-plugin"),
             ));
 
@@ -114,6 +117,9 @@ pub fn run() {
             commands::sync::diff_files,
             commands::install::install_files,
             commands::agent::agent_status,
+            commands::agent::agent_catalog,
+            commands::agent::agent_prepare,
+            commands::agent::agent_sign_in,
             commands::agent::agent_send,
             commands::agent::agent_conversations,
             commands::agent::agent_conversation,

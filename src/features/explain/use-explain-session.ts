@@ -25,7 +25,7 @@ import {
 } from "@/lib/ipc";
 
 import { append, place } from "../agent/agent-live";
-import type { AgentMessage } from "../agent/use-agent-session";
+import type { AgentMessage } from "../agent/agent-messages";
 
 export interface ExplainRequest {
   text: string;

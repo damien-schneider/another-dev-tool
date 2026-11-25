@@ -2,14 +2,14 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { AgentPart } from "@/lib/agent-ipc-types";
-
+import type { AgentMessage } from "./agent-messages";
 import { AgentTranscript } from "./agent-transcript";
-import type { AgentMessage } from "./use-agent-session";
 
 const read = (state: "running" | "done"): AgentPart => ({
   kind: "tool",
   id: "read",
   name: "Read",
+  title: null,
   input: { file_path: "/scratch/SKILL.md" },
   state,
   output: state === "done" ? "# Break" : null,

@@ -48,12 +48,13 @@ fn images_dir(dir: &Path, conversation: &str) -> std::path::PathBuf {
     dir.join(conversation).join("images")
 }
 
+/// `opens_with` names the agent a new conversation is pinned to; `None` adds to an open one.
 pub fn remember_request(
     db: &Db,
     dir: &Path,
     file_id: i64,
     conversation: &str,
-    opens: bool,
+    opens_with: Option<&str>,
     text: &str,
     images: &[PromptImage],
 ) -> AppResult<()> {
@@ -78,8 +79,9 @@ pub fn remember_request(
 
     let now = now_ms();
     db.with_tx(|tx| {
-        if opens {
-            agent_repo::insert(tx, conversation, file_id, &title(text, images.len()), now)?;
+        if let Some(agent) = opens_with {
+            let title = title(text, images.len());
+            agent_repo::insert(tx, conversation, file_id, agent, &title, now)?;
         }
         agent_repo::add_message(tx, conversation, NewMessage::request(text, &stored), now)?;
         Ok(())
@@ -103,7 +105,7 @@ pub fn remember_answer(
     conversation: &str,
     answer: &[Part],
     meta: &AnswerMeta,
-    started: bool,
+    agent_session: Option<&str>,
 ) -> AppResult<()> {
     let now = now_ms();
     db.with_tx(|tx| {
@@ -116,8 +118,8 @@ pub fn remember_answer(
                 now,
             )?;
         }
-        if started {
-            agent_repo::mark_started(tx, conversation)?;
+        if let Some(session) = agent_session {
+            agent_repo::remember_session(tx, conversation, session)?;
         }
         Ok(())
     })
@@ -155,9 +157,8 @@ pub fn load(db: &Db, dir: &Path, conversation: &str) -> AppResult<Vec<StoredMess
         .collect())
 }
 
-pub fn require(db: &Db, conversation: &str, file_id: i64) -> AppResult<agent_repo::Conversation> {
+pub fn require(db: &Db, conversation: &str) -> AppResult<agent_repo::Conversation> {
     db.with_conn(|conn| agent_repo::get(conn, conversation))?
-        .filter(|found| found.file_id == file_id)
         .ok_or_else(|| AppError::NotFound(format!("conversation {conversation}")))
 }
 
@@ -165,14 +166,15 @@ pub fn require(db: &Db, conversation: &str, file_id: i64) -> AppResult<agent_rep
 mod tests {
     use super::*;
     use crate::agent::answer::ToolState;
-    use crate::agent::settings::{Effort, Model};
 
-    const META: AnswerMeta = AnswerMeta {
-        model: None,
-        requested_model: Model::Sonnet,
-        effort: Effort::Medium,
-        duration_ms: Some(2523),
-    };
+    fn meta() -> AnswerMeta {
+        AnswerMeta {
+            model: None,
+            requested_model: "Sonnet".into(),
+            effort: Some("Medium".into()),
+            duration_ms: Some(2523),
+        }
+    }
 
     fn text(text: &str) -> Part {
         Part::Text { text: text.into() }
@@ -219,8 +221,17 @@ mod tests {
             base64: "iVBORw0KGgo=".into(),
         };
 
-        remember_request(&db, dir.path(), 1, "c", true, "Match this", &[shot]).unwrap();
-        remember_answer(&db, "c", &[text("Done."), text("  ")], &META, true).unwrap();
+        remember_request(
+            &db,
+            dir.path(),
+            1,
+            "c",
+            Some("claude-acp"),
+            "Match this",
+            &[shot],
+        )
+        .unwrap();
+        remember_answer(&db, "c", &[text("Done."), text("  ")], &meta(), Some("s1")).unwrap();
 
         let messages = load(&db, dir.path(), "c").unwrap();
         assert_eq!(messages.len(), 2);
@@ -238,11 +249,12 @@ mod tests {
         assert_eq!(messages[1].text, "Done.");
         assert_eq!(messages[0].parts, []);
         assert_eq!(messages[0].meta, None);
-        assert_eq!(messages[1].meta, Some(META));
-        let conversation = require(&db, "c", 1).unwrap();
-        assert!(conversation.started);
-        let listed = db.with_conn(|conn| agent_repo::list(conn, 1)).unwrap();
-        assert_eq!(listed[0].title, "Match this");
+        assert_eq!(messages[1].meta, Some(meta()));
+        let conversation = require(&db, "c").unwrap();
+        assert_eq!(conversation.agent_id, "claude-acp");
+        assert_eq!(conversation.agent_session_id.as_deref(), Some("s1"));
+        let listed = db.with_conn(agent_repo::list).unwrap();
+        assert_eq!(listed[0].conversation.title, "Match this");
     }
 
     #[test]
@@ -258,6 +270,7 @@ mod tests {
             Part::Tool {
                 id: "toolu_1".into(),
                 name: "Read".into(),
+                title: None,
                 input: Some(serde_json::json!({"file_path": "/x/a.md"})),
                 state: ToolState::Done,
                 output: Some("1\t# Notes".into()),
@@ -267,15 +280,15 @@ mod tests {
             text("There are 17.\n"),
         ];
 
-        remember_request(&db, dir.path(), 1, "c", true, "Count", &[]).unwrap();
-        remember_answer(&db, "c", &answer, &META, false).unwrap();
+        remember_request(&db, dir.path(), 1, "c", Some("claude-acp"), "Count", &[]).unwrap();
+        remember_answer(&db, "c", &answer, &meta(), None).unwrap();
 
         let messages = load(&db, dir.path(), "c").unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].role, Role::Agent);
         assert_eq!(messages[1].text, "Let me look.\n\nThere are 17.");
         assert_eq!(messages[1].parts, answer);
-        assert!(!require(&db, "c", 1).unwrap().started);
+        assert_eq!(require(&db, "c").unwrap().agent_session_id, None);
     }
 
     #[test]
@@ -285,6 +298,7 @@ mod tests {
         let tool = Part::Tool {
             id: "toolu_1".into(),
             name: "Edit".into(),
+            title: None,
             input: None,
             state: ToolState::Running,
             output: None,
@@ -295,25 +309,23 @@ mod tests {
             duration_ms: None,
         };
 
-        remember_request(&db, dir.path(), 1, "c", true, "Fix", &[]).unwrap();
-        remember_answer(&db, "c", &[blank, text("\n")], &META, true).unwrap();
-        remember_answer(&db, "c", std::slice::from_ref(&tool), &META, true).unwrap();
+        remember_request(&db, dir.path(), 1, "c", Some("claude-acp"), "Fix", &[]).unwrap();
+        remember_answer(&db, "c", &[blank, text("\n")], &meta(), Some("s1")).unwrap();
+        remember_answer(&db, "c", std::slice::from_ref(&tool), &meta(), Some("s1")).unwrap();
 
         let messages = load(&db, dir.path(), "c").unwrap();
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[1].text, "");
         assert_eq!(messages[1].parts, [tool]);
-        assert!(require(&db, "c", 1).unwrap().started);
     }
 
     #[test]
-    fn a_conversation_only_answers_for_its_own_file() {
+    fn a_conversation_is_found_by_its_id_alone() {
         let db = db_with_file();
-        db.with_conn(|conn| agent_repo::insert(conn, "c", 1, "Hi", 1))
+        db.with_conn(|conn| agent_repo::insert(conn, "c", 1, "claude-acp", "Hi", 1))
             .unwrap();
 
-        assert!(require(&db, "c", 1).is_ok());
-        assert_eq!(require(&db, "c", 2).unwrap_err().code(), "not_found");
-        assert_eq!(require(&db, "missing", 1).unwrap_err().code(), "not_found");
+        assert!(require(&db, "c").is_ok());
+        assert_eq!(require(&db, "missing").unwrap_err().code(), "not_found");
     }
 }

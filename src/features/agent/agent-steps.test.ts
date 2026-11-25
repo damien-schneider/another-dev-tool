@@ -22,11 +22,13 @@ const tool = (
   name: string,
   input: unknown,
   state: "running" | "done" | "error" = "done",
-  durationMs: number | null = 1000
+  durationMs: number | null = 1000,
+  title: string | null = null
 ): AgentStep => ({
   kind: "tool",
   id: name,
   name,
+  title,
   input,
   state,
   output: null,
@@ -67,6 +69,15 @@ describe("agent steps", () => {
         })
       )
     ).toBe('Ran git log --since="3 months ago" --format="%ad %an" --date=sho…');
+  });
+
+  it("names another agent's step by the title it gives, or by its kind", () => {
+    expect(
+      stepLabel(tool("execute", {}, "running", null, "List files\nls -la"))
+    ).toBe("List files");
+    expect(stepLabel(tool("execute", {}, "running", null, "  "))).toBe(
+      "Using execute"
+    );
   });
 
   it("folds the steps between two pieces of text into one group", () => {
@@ -114,6 +125,22 @@ describe("agent steps", () => {
         durationMs: null,
       })
     ).toBe("Sonnet · High");
+    expect(
+      metaLabel({
+        model: null,
+        requestedModel: "GPT-5.5",
+        effort: "Medium",
+        durationMs: 2000,
+      })
+    ).toBe("GPT-5.5 · Medium · 2s");
+    expect(
+      metaLabel({
+        model: null,
+        requestedModel: "Gemini CLI",
+        effort: null,
+        durationMs: null,
+      })
+    ).toBe("Gemini CLI");
     expect(formatDuration(400)).toBe("<1s");
   });
 });

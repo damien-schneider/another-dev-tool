@@ -2,6 +2,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter as _};
 
 use crate::agent::Part;
+use crate::ask::Proposal;
 use crate::capture::CaptureAccessStatus;
 use crate::db::prompts_repo::PromptHistoryEntry;
 use crate::patterns::Progress;
@@ -86,7 +87,7 @@ pub struct AgentPart {
 #[serde(rename_all = "camelCase")]
 pub struct AgentDone {
     pub run_id: u64,
-    pub proposal: Option<String>,
+    pub proposals: Vec<Proposal>,
     pub cancelled: bool,
 }
 
@@ -95,6 +96,7 @@ pub struct AgentDone {
 pub struct AgentError {
     pub run_id: u64,
     pub message: String,
+    pub sign_in: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

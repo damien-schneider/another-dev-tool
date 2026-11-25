@@ -8,7 +8,8 @@ use crate::error::{AppError, AppResult};
 pub struct Conversation {
     pub id: String,
     pub file_id: i64,
-    pub started: bool,
+    pub agent_id: String,
+    pub agent_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -17,6 +18,14 @@ pub struct ConversationSummary {
     pub id: String,
     pub title: String,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinnedSummary {
+    #[serde(flatten)]
+    pub conversation: ConversationSummary,
+    pub agent_id: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,11 +112,18 @@ pub(crate) fn from_json<T: serde::de::DeserializeOwned>(json: &str) -> AppResult
     serde_json::from_str(json).map_err(|error| AppError::internal(error.to_string()))
 }
 
-pub fn insert(conn: &Connection, id: &str, file_id: i64, title: &str, now: i64) -> AppResult<()> {
+pub fn insert(
+    conn: &Connection,
+    id: &str,
+    file_id: i64,
+    agent_id: &str,
+    title: &str,
+    now: i64,
+) -> AppResult<()> {
     conn.execute(
-        "INSERT INTO agent_conversations (id, file_id, title, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?4)",
-        (id, file_id, title, now),
+        "INSERT INTO agent_conversations (id, file_id, agent_id, title, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        (id, file_id, agent_id, title, now),
     )?;
     Ok(())
 }
@@ -115,40 +131,45 @@ pub fn insert(conn: &Connection, id: &str, file_id: i64, title: &str, now: i64) 
 pub fn get(conn: &Connection, id: &str) -> AppResult<Option<Conversation>> {
     Ok(conn
         .query_row(
-            "SELECT id, file_id, started FROM agent_conversations WHERE id = ?1",
+            "SELECT id, file_id, agent_id, agent_session_id FROM agent_conversations
+             WHERE id = ?1",
             [id],
             |row| {
                 Ok(Conversation {
                     id: row.get(0)?,
                     file_id: row.get(1)?,
-                    started: row.get(2)?,
+                    agent_id: row.get(2)?,
+                    agent_session_id: row.get(3)?,
                 })
             },
         )
         .optional()?)
 }
 
-pub fn list(conn: &Connection, file_id: i64) -> AppResult<Vec<ConversationSummary>> {
+pub fn list(conn: &Connection) -> AppResult<Vec<PinnedSummary>> {
     let mut stmt = conn.prepare(
-        "SELECT id, title, updated_at FROM agent_conversations
-         WHERE file_id = ?1 ORDER BY updated_at DESC, created_at DESC",
+        "SELECT id, title, updated_at, agent_id FROM agent_conversations
+         ORDER BY updated_at DESC, created_at DESC",
     )?;
     let rows = stmt
-        .query_map([file_id], |row| {
-            Ok(ConversationSummary {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                updated_at: row.get(2)?,
+        .query_map([], |row| {
+            Ok(PinnedSummary {
+                conversation: ConversationSummary {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    updated_at: row.get(2)?,
+                },
+                agent_id: row.get(3)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(rows)
 }
 
-pub fn mark_started(conn: &Connection, id: &str) -> AppResult<()> {
+pub fn remember_session(conn: &Connection, id: &str, agent_session_id: &str) -> AppResult<()> {
     conn.execute(
-        "UPDATE agent_conversations SET started = 1 WHERE id = ?1",
-        [id],
+        "UPDATE agent_conversations SET agent_session_id = ?2 WHERE id = ?1",
+        (id, agent_session_id),
     )?;
     Ok(())
 }
@@ -215,7 +236,6 @@ pub fn messages(conn: &Connection, conversation_id: &str) -> AppResult<Vec<Messa
 mod tests {
     use super::*;
     use crate::agent::answer::ToolState;
-    use crate::agent::settings::{Effort, Model};
     use crate::db::Db;
 
     fn with_file(db: &Db, id: i64) {
@@ -235,24 +255,25 @@ mod tests {
     }
 
     #[test]
-    fn lists_a_files_conversations_most_recently_active_first() {
+    fn lists_every_conversation_most_recently_active_first_whatever_file_it_began_on() {
         let db = Db::open_in_memory().unwrap();
         with_file(&db, 1);
         with_file(&db, 2);
 
         db.with_conn(|conn| {
-            insert(conn, "old", 1, "Tighten it", 10)?;
-            insert(conn, "new", 1, "Add steps", 20)?;
-            insert(conn, "elsewhere", 2, "Other file", 30)?;
+            insert(conn, "old", 1, "claude-acp", "Tighten it", 10)?;
+            insert(conn, "new", 1, "codex-acp", "Add steps", 20)?;
+            insert(conn, "elsewhere", 2, "claude-acp", "Other file", 30)?;
             add_message(conn, "old", NewMessage::request("again", &[]), 40)?;
             Ok(())
         })
         .unwrap();
 
-        let listed = db.with_conn(|conn| list(conn, 1)).unwrap();
-        let ids: Vec<_> = listed.iter().map(|c| c.id.as_str()).collect();
-        assert_eq!(ids, ["old", "new"]);
-        assert_eq!(listed[0].updated_at, 40);
+        let listed = db.with_conn(list).unwrap();
+        let ids: Vec<_> = listed.iter().map(|c| c.conversation.id.as_str()).collect();
+        assert_eq!(ids, ["old", "elsewhere", "new"]);
+        assert_eq!(listed[0].conversation.updated_at, 40);
+        assert_eq!(listed[2].agent_id, "codex-acp");
     }
 
     #[test]
@@ -274,6 +295,7 @@ mod tests {
             Part::Tool {
                 id: "toolu_1".into(),
                 name: "Read".into(),
+                title: Some("Read a.md".into()),
                 input: Some(serde_json::json!({"file_path": "/x/a.md"})),
                 state: ToolState::Done,
                 output: Some("1\t# Notes".into()),
@@ -285,13 +307,13 @@ mod tests {
         ];
         let meta = AnswerMeta {
             model: Some("claude-opus-5-5".into()),
-            requested_model: Model::Opus,
-            effort: Effort::High,
+            requested_model: "Opus".into(),
+            effort: Some("High".into()),
             duration_ms: Some(2829),
         };
 
         db.with_conn(|conn| {
-            insert(conn, "c", 1, "Look", 1)?;
+            insert(conn, "c", 1, "claude-acp", "Look", 1)?;
             add_message(
                 conn,
                 "c",
@@ -316,25 +338,23 @@ mod tests {
     }
 
     #[test]
-    fn a_conversation_remembers_once_claude_holds_its_session() {
+    fn a_conversation_remembers_the_session_its_agent_holds() {
         let db = Db::open_in_memory().unwrap();
         with_file(&db, 1);
-
-        db.with_conn(|conn| insert(conn, "c", 1, "Hi", 1)).unwrap();
-        assert!(
-            !db.with_conn(|conn| get(conn, "c"))
-                .unwrap()
-                .unwrap()
-                .started
-        );
-
-        db.with_conn(|conn| mark_started(conn, "c")).unwrap();
-        assert!(
+        let session = || {
             db.with_conn(|conn| get(conn, "c"))
                 .unwrap()
                 .unwrap()
-                .started
-        );
+                .agent_session_id
+        };
+
+        db.with_conn(|conn| insert(conn, "c", 1, "claude-acp", "Hi", 1))
+            .unwrap();
+        assert_eq!(session(), None);
+
+        db.with_conn(|conn| remember_session(conn, "c", "s1"))
+            .unwrap();
+        assert_eq!(session().as_deref(), Some("s1"));
     }
 
     #[test]
@@ -343,7 +363,7 @@ mod tests {
         with_file(&db, 1);
 
         db.with_conn(|conn| {
-            insert(conn, "c", 1, "Hi", 1)?;
+            insert(conn, "c", 1, "claude-acp", "Hi", 1)?;
             add_message(conn, "c", NewMessage::request("Hi", &[]), 2)?;
             conn.execute("DELETE FROM files WHERE id = 1", [])?;
             Ok(())

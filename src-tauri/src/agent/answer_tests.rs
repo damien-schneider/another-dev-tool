@@ -1,13 +1,13 @@
 use serde_json::json;
 
-use super::answer::{Answer, AnswerMeta, Emit, Part, ToolState};
-use super::settings::{Effort, Model, RunSettings};
+use super::answer::{Answer, AnswerMeta, Emit, Part, Requested, ToolState};
 use super::stream::{PartKind, StreamEvent};
 
 fn tool_start(id: &str, name: &str) -> StreamEvent {
     StreamEvent::PartStart(PartKind::Tool {
         id: id.into(),
         name: name.into(),
+        title: None,
     })
 }
 
@@ -56,6 +56,7 @@ fn parts_keep_their_order_across_api_messages_whose_block_indexes_restart() {
             Part::Tool {
                 id: "toolu_1".into(),
                 name: "Read".into(),
+                title: None,
                 input: Some(json!({"file_path": "/x/a.md"})),
                 state: ToolState::Done,
                 output: Some("1\t# Notes".into()),
@@ -241,22 +242,22 @@ fn the_meta_carries_the_resolved_model_and_the_run_duration() {
         ],
     );
 
-    let meta = answer.meta(RunSettings {
-        model: Model::Opus,
-        effort: Effort::High,
+    let meta = answer.meta(Requested {
+        model: "Opus 5.5".into(),
+        effort: Some("High".into()),
     });
     assert_eq!(
         meta,
         AnswerMeta {
             model: Some("claude-opus-5-5".into()),
-            requested_model: Model::Opus,
-            effort: Effort::High,
+            requested_model: "Opus 5.5".into(),
+            effort: Some("High".into()),
             duration_ms: Some(2829),
         }
     );
     assert_eq!(
         serde_json::to_value(&meta).unwrap(),
-        json!({"model": "claude-opus-5-5", "requestedModel": "opus", "effort": "high", "durationMs": 2829})
+        json!({"model": "claude-opus-5-5", "requestedModel": "Opus 5.5", "effort": "High", "durationMs": 2829})
     );
 }
 
@@ -265,6 +266,7 @@ fn parts_serialize_in_the_shape_the_panel_reads() {
     let tool = Part::Tool {
         id: "toolu_1".into(),
         name: "Read".into(),
+        title: Some("Read /x/a.md".into()),
         input: Some(json!({"file_path": "/x/a.md"})),
         state: ToolState::Done,
         output: Some("1\t# Notes".into()),
@@ -280,7 +282,7 @@ fn parts_serialize_in_the_shape_the_panel_reads() {
 
     assert_eq!(
         serde_json::to_value(&tool).unwrap(),
-        json!({"kind": "tool", "id": "toolu_1", "name": "Read", "input": {"file_path": "/x/a.md"}, "state": "done", "output": "1\t# Notes", "durationMs": 120})
+        json!({"kind": "tool", "id": "toolu_1", "name": "Read", "title": "Read /x/a.md", "input": {"file_path": "/x/a.md"}, "state": "done", "output": "1\t# Notes", "durationMs": 120})
     );
     assert_eq!(
         serde_json::to_value(&thinking).unwrap(),
@@ -292,4 +294,23 @@ fn parts_serialize_in_the_shape_the_panel_reads() {
     );
     let back: Part = serde_json::from_value(serde_json::to_value(&tool).unwrap()).unwrap();
     assert_eq!(back, tool);
+}
+
+#[test]
+fn a_tool_part_saved_before_titles_existed_still_reads_back() {
+    let stored = json!({"kind": "tool", "id": "toolu_1", "name": "Read", "input": null, "state": "done", "output": null, "durationMs": 4});
+
+    let part: Part = serde_json::from_value(stored).unwrap();
+
+    assert!(matches!(part, Part::Tool { title: None, .. }));
+}
+
+#[test]
+fn an_answer_saved_with_claude_cli_settings_still_reads_back() {
+    let stored = json!({"model": "claude-opus-5-5", "requestedModel": "opus", "effort": "high", "durationMs": 9});
+
+    let meta: AnswerMeta = serde_json::from_value(stored).unwrap();
+
+    assert_eq!(meta.requested_model, "opus");
+    assert_eq!(meta.effort.as_deref(), Some("high"));
 }

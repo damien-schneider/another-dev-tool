@@ -58,9 +58,8 @@ describe("Ask Claude images", () => {
 
     await waitFor(() =>
       expect(session.send).toHaveBeenCalledWith(
-        { prompt: "match this layout", images: [SCREENSHOT] },
-        DOCUMENT,
-        { model: "opus", effort: "high" }
+        { prompt: "match this layout", images: [SCREENSHOT], selection: null },
+        DOCUMENT
       )
     );
     expect(mocks.agentImage).toHaveBeenCalledWith(file);

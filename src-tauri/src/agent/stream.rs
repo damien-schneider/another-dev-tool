@@ -8,7 +8,11 @@ const IMAGE_PLACEHOLDER: &str = "[image]";
 pub enum PartKind {
     Text,
     Thinking,
-    Tool { id: String, name: String },
+    Tool {
+        id: String,
+        name: String,
+        title: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,6 +22,10 @@ pub enum StreamEvent {
     ToolInput {
         id: String,
         input: Value,
+    },
+    ToolTitle {
+        id: String,
+        title: String,
     },
     PartStop,
     ToolResult {
@@ -240,9 +248,11 @@ fn stream_event(event: Event) -> Option<StreamEvent> {
             Block::Thinking | Block::RedactedThinking => {
                 Some(StreamEvent::PartStart(PartKind::Thinking))
             }
-            Block::ToolUse { id, name } => {
-                Some(StreamEvent::PartStart(PartKind::Tool { id, name }))
-            }
+            Block::ToolUse { id, name } => Some(StreamEvent::PartStart(PartKind::Tool {
+                id,
+                name,
+                title: None,
+            })),
             Block::Ignored => None,
         },
         Event::ContentBlockDelta { delta } => match delta {

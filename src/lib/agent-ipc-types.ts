@@ -26,6 +26,72 @@ export interface AgentRunSettings {
   effort: AgentEffort;
 }
 
+/** Mirrors acp::catalog::Readiness */
+export type AgentReadiness =
+  | "installed"
+  | "download"
+  | "package"
+  | "needsNode"
+  | "needsUv";
+
+/** Mirrors acp::catalog::Listing */
+export interface AgentListing {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  icon: string | null;
+  readiness: AgentReadiness;
+  hardened: boolean;
+}
+
+/** Mirrors acp::protocol::Choice */
+export interface AgentConfigChoice {
+  value: string;
+  name: string;
+  description: string | null;
+}
+
+/** Mirrors acp::prepare::Picker */
+export interface AgentPicker {
+  id: string;
+  name: string;
+  current: string | null;
+  choices: AgentConfigChoice[];
+}
+
+/** Mirrors acp::protocol::AuthMethod */
+export interface AgentAuthMethod {
+  id: string;
+  name: string;
+  description: string | null;
+  type: string | null;
+}
+
+/** Mirrors acp::prepare::Prepared */
+export interface AgentPrepared {
+  images: boolean;
+  models: AgentPicker | null;
+  efforts: AgentPicker | null;
+  signIn: AgentAuthMethod[];
+  needsSignIn: boolean;
+}
+
+/** Mirrors acp::prepare::SignIn */
+export type AgentSignIn = "done" | "inTerminal";
+
+/** Mirrors commands::agent::ConfigPick */
+export interface AgentConfigPick {
+  id: string;
+  value: string;
+}
+
+/** Mirrors commands::agent::AgentChoice */
+export interface AgentRun {
+  id: string;
+  config: AgentConfigPick[];
+}
+
 /** Mirrors commands::agent::AgentStarted */
 export interface AgentStarted {
   runId: number;
@@ -39,11 +105,16 @@ export interface AgentConversationSummary {
   updatedAt: number;
 }
 
+/** Mirrors db::agent_repo::PinnedSummary */
+export interface AskConversationSummary extends AgentConversationSummary {
+  agentId: string;
+}
+
 /** Mirrors agent::answer::AnswerMeta */
 export interface AgentAnswerMeta {
   model: string | null;
-  requestedModel: AgentModel;
-  effort: AgentEffort;
+  requestedModel: string;
+  effort: string | null;
   durationMs: number | null;
 }
 
@@ -75,6 +146,7 @@ export type AgentPart =
       kind: "tool";
       id: string;
       name: string;
+      title: string | null;
       input: unknown;
       state: AgentToolState;
       output: string | null;
@@ -88,10 +160,19 @@ export interface AgentPartEvent {
   part: AgentPart;
 }
 
+/** Mirrors ask::staging::Proposal */
+export interface AgentProposal {
+  fileId: number;
+  path: string;
+  before: string;
+  after: string;
+  hash: string;
+}
+
 /** Mirrors events::AgentDone */
 export interface AgentDoneEvent {
   runId: number;
-  proposal: string | null;
+  proposals: AgentProposal[];
   cancelled: boolean;
 }
 
@@ -99,4 +180,5 @@ export interface AgentDoneEvent {
 export interface AgentErrorEvent {
   runId: number;
   message: string;
+  signIn: boolean;
 }

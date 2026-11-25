@@ -1,10 +1,11 @@
 import { Badge } from "@ctrl-ui/react/ui/badge";
-import { Folder, Plus, X } from "lucide-react";
+import { Folder, Plus, SquareDashedText, X } from "lucide-react";
 import { type DragEvent, type ReactNode, useRef, useState } from "react";
 
 import { FileKindIcon } from "@/features/library/file-kind";
 import { fileTitle } from "@/features/library/library-model";
 import type { FileRow } from "@/lib/ipc-types";
+import type { TextSelection } from "@/lib/text-selection";
 
 import {
   type AgentReference,
@@ -15,13 +16,13 @@ import {
 function ReferenceChip({
   icon,
   label,
-  path,
+  title,
   included,
   onToggle,
 }: {
   icon: ReactNode;
   label: string;
-  path: string;
+  title: string;
   included: boolean;
   onToggle: () => void;
 }) {
@@ -29,7 +30,7 @@ function ReferenceChip({
     <Badge
       aria-label={`${included ? "Remove" : "Add"} ${label}`}
       className="min-w-0 shrink"
-      render={<button onClick={onToggle} title={path} type="button" />}
+      render={<button onClick={onToggle} title={title} type="button" />}
       variant={included ? "outline" : "ghost"}
     >
       {icon}
@@ -54,7 +55,7 @@ export function ComposerFile({
       included={included}
       label={fileTitle(file)}
       onToggle={() => onIncludedChange(!included)}
-      path={file.path}
+      title={file.path}
     />
   );
 }
@@ -79,9 +80,31 @@ export function ComposerReferences({
       key={reference.path}
       label={reference.label}
       onToggle={() => onRemove(reference.path)}
-      path={reference.path}
+      title={reference.path}
     />
   ));
+}
+
+export function ComposerSelection({
+  selection: { text, firstLine, lastLine },
+  onRemove,
+}: {
+  selection: TextSelection;
+  onRemove: () => void;
+}) {
+  return (
+    <ReferenceChip
+      icon={<SquareDashedText aria-hidden="true" />}
+      included
+      label={
+        firstLine === lastLine
+          ? `Line ${firstLine}`
+          : `Lines ${firstLine}–${lastLine}`
+      }
+      onToggle={onRemove}
+      title={text}
+    />
+  );
 }
 
 const OVER_STYLE = {

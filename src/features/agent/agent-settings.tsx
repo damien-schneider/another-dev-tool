@@ -12,11 +12,6 @@ export interface SettingsScope {
   defaults: AgentRunSettings;
 }
 
-export const AGENT_SETTINGS_SCOPE: SettingsScope = {
-  storagePrefix: "another-dev-tool.agent",
-  defaults: { model: "opus", effort: "high" },
-};
-
 export const MODELS: {
   value: AgentModel;
   label: string;

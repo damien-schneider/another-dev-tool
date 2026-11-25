@@ -92,7 +92,7 @@ impl Explainer {
 
     pub fn start(&self, request: &Request<'_>) -> AppResult<RunHandle> {
         self.slot.claim()?;
-        let started = cli::resolve()
+        let started = cli::resolve(cli::CLAUDE)
             .ok_or(AppError::AgentMissing)
             .and_then(|binary| {
                 plugin::install(&self.plugin_dir)?;
@@ -122,6 +122,7 @@ fn message(request: &Request<'_>) -> String {
         text: format!("{}\n\n{}", request.level.tag(), request.text.trim()),
         images: vec![],
         references: vec![],
+        selection: None,
     })
 }
 

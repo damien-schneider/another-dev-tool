@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { useSkillMentions } from "@/features/links/use-skill-mentions";
 import type { FileRow } from "@/lib/ipc-types";
 
+import type { TextSelection } from "@/lib/text-selection";
+
 import { RichEditor } from "./rich-editor";
 
 const SKILL: FileRow = {
@@ -32,10 +34,12 @@ function Document({
   body,
   onChange = () => undefined,
   onOpen = () => undefined,
+  onSelectionChange = () => undefined,
 }: {
   body: string;
   onChange?: (body: string) => void;
   onOpen?: (file: FileRow) => void;
+  onSelectionChange?: (selection: TextSelection | null) => void;
 }) {
   const mentions = useSkillMentions({ targets: [SKILL], onOpen });
   return (
@@ -44,6 +48,7 @@ function Document({
       extensions={mentions.extensions}
       label="Body"
       onChange={onChange}
+      onSelectionChange={onSelectionChange}
       readOnly={false}
     />
   );
@@ -112,5 +117,32 @@ describe("RichEditor", () => {
 
     fireEvent.click(mention, { metaKey: true });
     expect(onOpen).toHaveBeenCalledWith(SKILL);
+  });
+
+  it("reports the selected text with the lines it covers, until the selection collapses", async () => {
+    const onSelectionChange = vi.fn();
+    const { container } = render(
+      <Document
+        body={"# Rules\n\nKeep it short.\nAnd kind.\n"}
+        onSelectionChange={onSelectionChange}
+      />
+    );
+    const view = await editorView(container);
+    const from = view.state.doc.line(3).from + "Keep it ".length;
+
+    act(() =>
+      view.dispatch({
+        selection: { anchor: from, head: view.state.doc.line(4).to },
+        userEvent: "select.pointer",
+      })
+    );
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      text: "short.\nAnd kind.",
+      firstLine: 3,
+      lastLine: 4,
+    });
+
+    act(() => view.dispatch({ selection: { anchor: from } }));
+    expect(onSelectionChange).toHaveBeenLastCalledWith(null);
   });
 });

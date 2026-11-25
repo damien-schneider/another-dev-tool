@@ -2,10 +2,11 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use crate::agent::AgentRuntime;
+use crate::acp::Catalog;
+use crate::ask::AgentRuntime;
 use crate::db::Db;
-use crate::explain::Explainer;
 use crate::error::{AppError, AppResult};
+use crate::explain::Explainer;
 use crate::patterns::Runner;
 use crate::watcher::WatcherHandle;
 
@@ -19,6 +20,7 @@ pub struct AppState {
     pub prompt_attachments_dir: PathBuf,
     pub agent_dir: PathBuf,
     pub agent: AgentRuntime,
+    pub catalog: Catalog,
     pub explainer: Explainer,
     pub patterns: Runner,
     scan: Mutex<Option<RunningScan>>,
@@ -30,6 +32,7 @@ impl AppState {
         db: Db,
         prompt_attachments_dir: PathBuf,
         agent_dir: PathBuf,
+        agents_dir: PathBuf,
         explainer_plugin_dir: PathBuf,
     ) -> Self {
         Self {
@@ -37,6 +40,7 @@ impl AppState {
             prompt_attachments_dir,
             agent_dir,
             agent: AgentRuntime::default(),
+            catalog: Catalog::new(agents_dir),
             explainer: Explainer::new(explainer_plugin_dir),
             patterns: Runner::default(),
             scan: Mutex::new(None),
@@ -108,6 +112,7 @@ mod tests {
             Db::open_in_memory().unwrap(),
             PathBuf::from("/tmp/prompts"),
             PathBuf::from("/tmp/agent"),
+            PathBuf::from("/tmp/acp-agents"),
             PathBuf::from("/tmp/explainer"),
         )
     }

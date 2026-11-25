@@ -4,12 +4,11 @@ import { Spinner } from "@ctrl-ui/react/ui/spinner";
 import { Text } from "@ctrl-ui/react/ui/typography";
 import { Repeat2 } from "lucide-react";
 import { useMemo, useRef } from "react";
-
-import { INSTALL_COMMAND } from "@/features/agent/agent-panel";
 import type { SkillDraft } from "@/features/library/new-skill-dialog";
 import { useHomeDirectory } from "@/lib/home-dir";
 import type { FileRow } from "@/lib/ipc-types";
 import type { Pattern, PatternsState } from "@/lib/patterns-ipc-types";
+import { INSTALL_COMMAND } from "@/shared/components/claude-code-missing";
 import {
   EmptyState,
   ErrorState,

@@ -237,6 +237,7 @@ mod tests {
             Db::open_in_memory().unwrap(),
             app_data.path().join("prompts"),
             app_data.path().join("agent"),
+            app_data.path().join("acp-agents"),
             app_data.path().join("explainer"),
         );
 
@@ -295,6 +296,7 @@ mod tests {
             attachment_root,
             tempdir().unwrap().keep(),
             tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
         );
         let image = PendingPromptImage {
             rgba: vec![255, 0, 0, 255],
@@ -332,6 +334,7 @@ mod tests {
             attachment_root,
             tempdir().unwrap().keep(),
             tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
         );
         let image = PendingPromptImage {
             rgba: vec![255, 0, 0, 255],
@@ -356,6 +359,7 @@ mod tests {
         let state = AppState::new(
             Db::open_in_memory().unwrap(),
             attachment_root,
+            tempdir().unwrap().keep(),
             tempdir().unwrap().keep(),
             tempdir().unwrap().keep(),
         );

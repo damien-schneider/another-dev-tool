@@ -280,7 +280,7 @@ export function App() {
               onOpenProject={openProject.open}
               onOpenSettings={() => selectView("settings")}
               onReference={
-                agent.available && selected
+                selected
                   ? (reference) => {
                       agent.addReference(reference);
                       sidePanel.show("agent");

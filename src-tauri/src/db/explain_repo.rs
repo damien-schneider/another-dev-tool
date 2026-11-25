@@ -156,15 +156,16 @@ pub fn messages(conn: &Connection, conversation_id: &str) -> AppResult<Vec<Store
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::agent::settings::{Effort, Model};
     use crate::db::Db;
 
-    const META: AnswerMeta = AnswerMeta {
-        model: None,
-        requested_model: Model::Sonnet,
-        effort: Effort::Medium,
-        duration_ms: Some(1200),
-    };
+    fn meta() -> AnswerMeta {
+        AnswerMeta {
+            model: None,
+            requested_model: "sonnet".into(),
+            effort: Some("medium".into()),
+            duration_ms: Some(1200),
+        }
+    }
 
     #[test]
     fn a_conversation_reads_back_its_question_and_answer_in_order() {
@@ -182,7 +183,7 @@ mod tests {
                     "c",
                     Role::Agent,
                     "It walks the roots.",
-                    Some((&parts, &META)),
+                    Some((&parts, &meta())),
                     3,
                 )?;
                 messages(conn, "c")
@@ -193,7 +194,7 @@ mod tests {
         assert_eq!(stored[0].role, Role::You);
         assert!(stored[0].parts.is_empty());
         assert_eq!(stored[1].parts, parts);
-        assert_eq!(stored[1].meta, Some(META));
+        assert_eq!(stored[1].meta, Some(meta()));
     }
 
     #[test]

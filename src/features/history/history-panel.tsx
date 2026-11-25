@@ -49,7 +49,8 @@ function ChangeDiff({ load }: { load: () => Promise<CommitChange> }) {
     <DiffView
       after={state.value.after}
       before={state.value.before}
-      className="max-h-96"
+      maxHeight="24rem"
+      name="Changes"
     />
   );
 }

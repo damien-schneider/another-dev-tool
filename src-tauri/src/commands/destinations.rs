@@ -80,6 +80,7 @@ mod tests {
             tempdir().unwrap().keep(),
             tempdir().unwrap().keep(),
             tempdir().unwrap().keep(),
+            tempdir().unwrap().keep(),
         )
     }
 

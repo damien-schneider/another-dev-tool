@@ -5,8 +5,12 @@ use std::sync::Mutex;
 
 use crate::error::{AppError, AppResult};
 
-/// Shared by every slot: their runs stream on the same events, told apart by id.
+/// Shared by every run, CLI or ACP: they stream on the same events, told apart by id.
 static RUNS: AtomicU64 = AtomicU64::new(0);
+
+pub fn next_run_id() -> u64 {
+    RUNS.fetch_add(1, Ordering::Relaxed)
+}
 
 #[derive(Debug)]
 pub struct RunHandle {
@@ -60,7 +64,7 @@ impl RunSlot {
             .map_err(|_| AppError::internal("agent child mutex poisoned"))? = Some(child);
 
         Ok(RunHandle {
-            run_id: RUNS.fetch_add(1, Ordering::Relaxed),
+            run_id: next_run_id(),
             stdout,
             stderr,
         })

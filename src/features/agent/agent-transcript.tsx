@@ -38,9 +38,9 @@ import { Markdown, type MarkdownProps } from "@ctrl-ui/react/ui/markdown";
 import { type ReactNode, useState } from "react";
 
 import { type AgentImage, imageSource } from "./agent-images";
+import type { AgentMessage } from "./agent-messages";
 import { answerText, metaLabel, segments } from "./agent-steps";
 import { AgentSteps } from "./agent-steps-view";
-import type { AgentMessage } from "./use-agent-session";
 
 type Asked = Extract<AgentMessage, { role: "you" }>;
 type Answered = Extract<AgentMessage, { role: "agent" }>;

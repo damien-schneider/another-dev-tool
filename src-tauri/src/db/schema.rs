@@ -1,4 +1,4 @@
-pub const SCHEMA_VERSION: i64 = 12;
+pub const SCHEMA_VERSION: i64 = 13;
 
 pub const MIGRATION_1: &str = r"
 CREATE TABLE IF NOT EXISTS roots (
@@ -225,4 +225,13 @@ CREATE TABLE IF NOT EXISTS explain_messages (
 
 CREATE INDEX IF NOT EXISTS explain_messages_conversation_idx
 ON explain_messages(conversation_id, id);
+";
+
+/// A conversation is pinned to the ACP agent that holds its session. Conversations the
+/// Claude Code CLI already held keep their id, which `claude-acp` resumes as a session.
+pub const MIGRATION_13: &str = r"
+ALTER TABLE agent_conversations ADD COLUMN agent_id TEXT NOT NULL DEFAULT 'claude-acp';
+ALTER TABLE agent_conversations ADD COLUMN agent_session_id TEXT;
+UPDATE agent_conversations SET agent_session_id = id WHERE started = 1;
+ALTER TABLE agent_conversations DROP COLUMN started;
 ";

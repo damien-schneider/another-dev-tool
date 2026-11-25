@@ -53,7 +53,8 @@ export function ReviewChangesDialog({
           <DiffView
             after={editor.documentText}
             before={editor.buffer?.content.content ?? ""}
-            className="max-h-[60vh]"
+            maxHeight="60vh"
+            name="Unsaved changes"
           />
         </DialogBody>
         <DialogFooter>
@@ -137,7 +138,8 @@ export function ConflictDialog({
           <DiffView
             after={editor.documentText}
             before={diskText ?? editor.buffer?.content.content ?? ""}
-            className="max-h-[50vh]"
+            maxHeight="50vh"
+            name={fileTitle(file)}
           />
         </AlertDialogBody>
         <AlertDialogFooter>

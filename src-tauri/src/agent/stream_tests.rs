@@ -99,6 +99,7 @@ fn a_tool_block_is_named_as_it_opens_and_its_partial_input_is_ignored() {
         [StreamEvent::PartStart(PartKind::Tool {
             id: "toolu_01QxiMJqa6LSY5o3NVWmKB2E".into(),
             name: "Read".into(),
+            title: None,
         })]
     );
     assert!(parse_line(&partial).is_empty());

@@ -71,9 +71,9 @@ export const emitTextPart = (runId = RUN_ID) =>
 export const emitDelta = (text: string, runId = RUN_ID) =>
   fire(mocks.handlers.delta)({ runId, index: 0, text });
 export const emitDone = (runId = RUN_ID) =>
-  fire(mocks.handlers.done)({ runId, proposal: null, cancelled: false });
+  fire(mocks.handlers.done)({ runId, proposals: [], cancelled: false });
 export const emitError = (message: string, runId = RUN_ID) =>
-  fire(mocks.handlers.error)({ runId, message });
+  fire(mocks.handlers.error)({ runId, message, signIn: false });
 
 export const said = (
   id: number,

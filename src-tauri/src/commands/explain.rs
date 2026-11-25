@@ -135,7 +135,7 @@ fn remember_answer(
                 conversation,
                 Role::Agent,
                 &answer_text(parts),
-                Some((parts, &answer.meta(settings))),
+                Some((parts, &answer.meta(settings.into()))),
                 now,
             )?;
         }
@@ -163,5 +163,5 @@ fn stream_until_done(
         log::error!("could not save the explanation to its history: {error}");
     }
 
-    report(app, run_id, end, cancelled, None);
+    report(app, run_id, end, cancelled, Vec::new());
 }

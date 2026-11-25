@@ -9,21 +9,28 @@ import {
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AgentListing } from "@/lib/agent-ipc-types";
+
 import { AgentPanel } from "./agent-panel";
 import {
+  agentChoice,
   composer,
   DOCUMENT,
   FILE,
+  PREPARED,
   PROPOSAL,
   renderPanel,
   SCREENSHOT,
+  suggested,
 } from "./agent-panel.fixtures";
+
+const CODEX_OPTION = /Codex/;
 
 let typeInEditor: (text: string) => void = () => undefined;
 
 function LiveEditor() {
   const [document, setDocument] = useState(DOCUMENT);
-  const [proposal, setProposal] = useState<string | null>(PROPOSAL);
+  const [proposals, setProposals] = useState([suggested(PROPOSAL)]);
   typeInEditor = setDocument;
   return (
     <>
@@ -34,8 +41,10 @@ function LiveEditor() {
           file={FILE}
           onApply={setDocument}
           onClose={vi.fn()}
+          onRemoveSelection={vi.fn()}
+          selection={null}
           session={{
-            available: true,
+            agent: agentChoice(),
             conversations: [],
             conversationId: null,
             openConversation: vi.fn(),
@@ -45,7 +54,8 @@ function LiveEditor() {
             ],
             running: false,
             error: null,
-            proposal,
+            signedOut: false,
+            proposals,
             references: [],
             addReference: vi.fn(),
             removeReference: vi.fn(),
@@ -53,7 +63,7 @@ function LiveEditor() {
             includeFile: vi.fn(),
             send: vi.fn().mockResolvedValue(undefined),
             cancel: vi.fn().mockResolvedValue(undefined),
-            dismissProposal: () => setProposal(null),
+            dismissProposal: () => setProposals([]),
             draft: "",
             setDraft: vi.fn(),
             prefill: vi.fn(),
@@ -77,32 +87,8 @@ describe("AgentPanel", () => {
 
     await waitFor(() =>
       expect(session.send).toHaveBeenCalledWith(
-        { prompt: "tighten it", images: [] },
-        DOCUMENT,
-        {
-          model: "opus",
-          effort: "high",
-        }
-      )
-    );
-  });
-
-  it("runs with the model and thinking level picked last time, ignoring unknown ones", async () => {
-    window.localStorage.setItem("another-dev-tool.agent-model", "haiku");
-    window.localStorage.setItem("another-dev-tool.agent-effort", "ludicrous");
-    const { session } = renderPanel();
-
-    fireEvent.change(composer(), { target: { value: "tighten it" } });
-    fireEvent.keyDown(composer(), { key: "Enter" });
-
-    await waitFor(() =>
-      expect(session.send).toHaveBeenCalledWith(
-        { prompt: "tighten it", images: [] },
-        DOCUMENT,
-        {
-          model: "haiku",
-          effort: "high",
-        }
+        { prompt: "tighten it", images: [], selection: null },
+        DOCUMENT
       )
     );
   });
@@ -113,17 +99,65 @@ describe("AgentPanel", () => {
     expect(screen.getByText("ux-rules")).toBeTruthy();
   });
 
-  it("picks the model and thinking level from one dropdown", () => {
-    window.localStorage.setItem("another-dev-tool.agent-model", "haiku");
-    renderPanel();
+  it("picks the agent's model and thinking level from one dropdown", () => {
+    renderPanel({ agent: agentChoice({ model: "sonnet" }) });
 
-    const trigger = screen.getByRole("button", {
-      name: "Model: Haiku, Thinking: High",
-    });
     expect(
-      trigger.querySelector('[data-control-ui="provider-logo"] path')
+      screen.getByRole("button", { name: "Model: Sonnet, Effort: High" })
     ).toBeTruthy();
     expect(screen.queryAllByRole("combobox")).toHaveLength(0);
+  });
+
+  it("switches to the agent picked from the header list", async () => {
+    const claude = agentChoice().listings;
+    const agent = agentChoice({
+      listings: [
+        ...claude,
+        {
+          id: "codex-acp",
+          name: "Codex",
+          version: "1",
+          description: "",
+          icon: null,
+          readiness: "download",
+          hardened: true,
+        },
+      ],
+    });
+    renderPanel({ agent });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Agent: Claude Agent" })
+    );
+    fireEvent.click(await screen.findByRole("option", { name: CODEX_OPTION }));
+
+    expect(agent.choose).toHaveBeenCalledWith("codex-acp");
+  });
+
+  it("names the agents kept to the file when the chosen one is not", () => {
+    const gemini: AgentListing = {
+      id: "gemini",
+      name: "Gemini CLI",
+      version: "1",
+      description: "",
+      icon: null,
+      readiness: "installed",
+      hardened: false,
+    };
+    renderPanel({
+      agent: agentChoice({
+        listings: [...agentChoice().listings, gemini],
+        agentId: gemini.id,
+        listing: gemini,
+        name: gemini.name,
+      }),
+    });
+
+    expect(
+      screen.getByText(
+        "Only Claude Agent is fully kept to this file. Gemini CLI is held back only when it asks for permission."
+      )
+    ).toBeTruthy();
   });
 
   it("drafts an example request without sending it", () => {
@@ -144,14 +178,80 @@ describe("AgentPanel", () => {
     expect(session.send).not.toHaveBeenCalled();
   });
 
-  it("tells the user how to install the agent CLI instead of offering a composer when it is missing", () => {
-    renderPanel({ available: false });
+  it("walks through signing in from the Terminal, then checks the agent again", async () => {
+    const agent = agentChoice({
+      preparing: {
+        state: "ready",
+        prepared: {
+          ...PREPARED,
+          needsSignIn: true,
+          signIn: [
+            {
+              id: "claude-ai-login",
+              name: "Claude account",
+              description: null,
+              type: "terminal",
+            },
+          ],
+        },
+      },
+      signIn: vi.fn().mockResolvedValue("inTerminal"),
+    });
+    renderPanel({ agent });
 
-    expect(screen.getByText("Claude Code isn’t installed")).toBeTruthy();
-    expect(
-      screen.getByText("npm install -g @anthropic-ai/claude-code")
-    ).toBeTruthy();
-    expect(screen.queryByRole("textbox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Claude account" }));
+
+    const proceed = await screen.findByRole("button", { name: "Continue" });
+    expect(agent.signIn).toHaveBeenCalledWith("claude-ai-login");
+    expect(agent.refresh).not.toHaveBeenCalled();
+    fireEvent.click(proceed);
+    expect(agent.refresh).toHaveBeenCalled();
+  });
+
+  it("sends the refused request again once signed in", async () => {
+    const agent = agentChoice({
+      preparing: {
+        state: "ready",
+        prepared: {
+          ...PREPARED,
+          signIn: [
+            {
+              id: "chat-gpt",
+              name: "ChatGPT account",
+              description: null,
+              type: "agent",
+            },
+          ],
+        },
+      },
+    });
+    const { session } = renderPanel({
+      agent,
+      signedOut: true,
+      error: "Sign in to use Codex.",
+      messages: [{ key: "you-1", role: "you", text: "tighten it", images: [] }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "ChatGPT account" }));
+
+    await waitFor(() =>
+      expect(session.send).toHaveBeenCalledWith(
+        { prompt: "tighten it", images: [], selection: null },
+        DOCUMENT
+      )
+    );
+    expect(agent.refresh).toHaveBeenCalled();
+  });
+
+  it("offers to start an agent again after it failed to start", () => {
+    const agent = agentChoice({
+      preparing: { state: "failed", message: "npx not found" },
+    });
+    renderPanel({ agent });
+
+    expect(screen.getByText("npx not found")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(agent.refresh).toHaveBeenCalled();
   });
 
   it("lets a running request be stopped", () => {
@@ -168,12 +268,14 @@ describe("AgentPanel", () => {
   });
 
   it("applies a document the agent actually changed to the editor", () => {
-    const { session, onApply } = renderPanel({ proposal: PROPOSAL });
+    const { session, onApply } = renderPanel({
+      proposals: [suggested(PROPOSAL)],
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Apply to editor" }));
 
     expect(onApply).toHaveBeenCalledWith(PROPOSAL);
-    expect(session.dismissProposal).toHaveBeenCalled();
+    expect(session.dismissProposal).toHaveBeenCalledWith(FILE.id);
   });
 
   it("takes an applied change back out, and offers it again", () => {
@@ -204,16 +306,18 @@ describe("AgentPanel", () => {
   });
 
   it("dismisses a proposal without touching the editor", () => {
-    const { session, onApply } = renderPanel({ proposal: PROPOSAL });
+    const { session, onApply } = renderPanel({
+      proposals: [suggested(PROPOSAL)],
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
 
-    expect(session.dismissProposal).toHaveBeenCalled();
+    expect(session.dismissProposal).toHaveBeenCalledWith(FILE.id);
     expect(onApply).not.toHaveBeenCalled();
   });
 
   it("stays quiet when the agent hands back an identical document", () => {
-    renderPanel({ proposal: DOCUMENT });
+    renderPanel({ proposals: [suggested(DOCUMENT)] });
 
     expect(
       screen.queryByRole("button", { name: "Apply to editor" })
@@ -234,12 +338,8 @@ describe("AgentPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
 
     expect(session.send).toHaveBeenCalledWith(
-      { prompt: "tighten it", images: [SCREENSHOT] },
-      DOCUMENT,
-      {
-        model: "opus",
-        effort: "high",
-      }
+      { prompt: "tighten it", images: [SCREENSHOT], selection: null },
+      DOCUMENT
     );
   });
 
